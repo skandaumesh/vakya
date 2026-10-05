@@ -59,6 +59,35 @@ def test_own_key_provider_is_reused_not_rebuilt():
     assert providers.user_groq_provider("gsk_two") is not a
 
 
+def test_production_refuses_ai_without_app_key(monkeypatch, fake_ai):
+    monkeypatch.setattr(config, "PRODUCTION", True)
+    monkeypatch.setattr(config, "APP_KEY", None)
+    r = client.post("/suggest", json=BODY)
+    assert r.status_code == 503 and "VAKYA_APP_KEY" in r.json()["detail"]
+    monkeypatch.setattr(config, "APP_KEY", "secret")
+    assert client.post("/suggest", json=BODY).status_code == 401
+    assert client.post("/suggest", json=BODY, headers={"X-Vakya-Key": "secret"}).status_code == 200
+
+
+def test_api_docs_hidden_in_production(monkeypatch):
+    import importlib
+
+    monkeypatch.setenv("RENDER", "true")
+    monkeypatch.setenv("VAKYA_APP_KEY", "secret")
+    importlib.reload(config)
+    prod_app = importlib.reload(main).app
+    try:
+        prod = TestClient(prod_app)
+        assert prod.get("/docs").status_code == 404
+        assert prod.get("/openapi.json").status_code == 404
+        assert prod.get("/health").status_code == 200
+    finally:
+        monkeypatch.delenv("RENDER")
+        monkeypatch.delenv("VAKYA_APP_KEY")
+        importlib.reload(config)
+        importlib.reload(main)
+
+
 def test_no_limit_when_not_configured(monkeypatch, fake_ai):
     monkeypatch.setattr(config, "DAILY_LIMIT", 0)
     for _ in range(5):

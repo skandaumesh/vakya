@@ -26,11 +26,17 @@ async def lifespan(_: FastAPI):
         task.cancel()
 
 
-app = FastAPI(title="Vakya", version="0.2.0", lifespan=lifespan)
+# In production the interactive API docs (/docs, /redoc, /openapi.json) are hidden:
+# no need to show strangers how to call the server.
+_docs = {} if config.SHOW_DOCS else {"docs_url": None, "redoc_url": None, "openapi_url": None}
+app = FastAPI(title="Vakya", version="0.2.0", lifespan=lifespan, **_docs)
 
 
 def require_app_key(x_vakya_key: str | None = Header(default=None)) -> None:
     if config.APP_KEY is None:
+        if config.PRODUCTION:
+            # Never run an open AI endpoint on the internet because a setting was forgotten.
+            raise HTTPException(status_code=503, detail="server is missing VAKYA_APP_KEY")
         return
     if x_vakya_key is None or not hmac.compare_digest(x_vakya_key, config.APP_KEY):
         raise HTTPException(status_code=401, detail="bad or missing X-Vakya-Key")

@@ -46,9 +46,16 @@ FALLBACK_MODELS = os.environ.get("VAKYA_FALLBACK_MODELS")
 # For thinking models (Groq gpt-oss, Gemini): low = fastest, medium/high = more careful.
 REASONING_EFFORT = os.environ.get("VAKYA_REASONING_EFFORT") or None
 
+# Running on a public host (Render sets RENDER=true). Production refuses AI requests
+# without an app key and hides the API docs.
+PRODUCTION = os.environ.get("RENDER") == "true" or os.environ.get("VAKYA_PRODUCTION") == "1"
+
 # Shared secret the Android app sends in the X-Vakya-Key header.
 # Leave unset for local development (no auth).
 APP_KEY = os.environ.get("VAKYA_APP_KEY") or None
+
+# Interactive API docs only for local development.
+SHOW_DOCS = not PRODUCTION and APP_KEY is None
 
 # AI replies each phone may use per day on the shared key (0 = no limit). Phones
 # that send their own Groq key are not limited.
