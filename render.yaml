@@ -1,0 +1,26 @@
+# Render blueprint for the Vakya server (render.com → New → Blueprint → this repo).
+# Secrets (sync: false) are entered in Render's dashboard, never committed.
+services:
+  - type: web
+    name: vakya
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: VAKYA_PROVIDER
+        value: groq
+      - key: GROQ_API_KEY            # your Groq key (shared by friends without their own)
+        sync: false
+      - key: VAKYA_APP_KEY           # secret the Vakya app sends; blocks everyone else
+        sync: false
+      - key: VAKYA_DAILY_LIMIT       # AI replies per phone per day on the shared key
+        value: "40"
+      - key: VAKYA_KANGLISH_PROVIDER # no Gemini free tier for other people's chats
+        value: ""
+      - key: VAKYA_PHONE_LINK        # USB phone linking is for local testing only
+        value: "0"

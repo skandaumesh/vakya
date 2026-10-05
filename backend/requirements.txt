@@ -1,0 +1,5 @@
+openai>=2.0         # client for Groq, Gemini, Ollama and other OpenAI-compatible APIs
+anthropic>=1.11,<2  # only used when VAKYA_PROVIDER=anthropic
+fastapi>=0.140
+uvicorn[standard]>=0.50
+pydantic>=2.10

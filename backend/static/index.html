@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vakya — Reply suggestions in your texting style</title>
+    <meta name="description" content="Vakya gives you smart reply suggestions right inside WhatsApp, Telegram and more — in YOUR texting style. Tap the ✨ bubble and pick a reply. By OneZeroLabs.">
+    <meta name="theme-color" content="#0a0a0f">
+    <link rel="icon" type="image/png" href="/static/logo.png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        /* =================== DESIGN TOKENS =================== */
+        :root {
+            --bg-primary: #0a0a0f;
+            --bg-secondary: #111118;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --bg-glass: rgba(255, 255, 255, 0.04);
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-accent: rgba(196, 163, 100, 0.3);
+
+            --text-primary: #f0ede8;
+            --text-secondary: #8a8690;
+            --text-muted: #5a5660;
+
+            --accent-gold: #c4a364;
+            --accent-gold-light: #dfc48f;
+            --accent-gold-dark: #9a7d4a;
+            --accent-glow: rgba(196, 163, 100, 0.15);
+            --accent-glow-strong: rgba(196, 163, 100, 0.25);
+
+            --gradient-hero: linear-gradient(135deg, #c4a364 0%, #dfc48f 50%, #c4a364 100%);
+            --gradient-dark: linear-gradient(180deg, #0a0a0f 0%, #111118 100%);
+            --gradient-card: linear-gradient(135deg, rgba(196, 163, 100, 0.05) 0%, rgba(196, 163, 100, 0.01) 100%);
+
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+
+            --radius-sm: 8px;
+            --radius-md: 12px;
+            --radius-lg: 20px;
+            --radius-xl: 28px;
+            --radius-full: 9999px;
+
+            --shadow-glow: 0 0 60px rgba(196, 163, 100, 0.08);
+            --shadow-card: 0 4px 24px rgba(0, 0, 0, 0.3);
+            --shadow-elevated: 0 8px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        /* =================== RESET & BASE =================== */
+        *, *::before, *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        body {
+            font-family: var(--font-sans);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+        }
+
+        /* =================== AMBIENT BACKGROUND =================== */
+        .ambient-bg {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .ambient-orb {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(120px);
+            opacity: 0.4;
+            animation: float 20s ease-in-out infinite;
+        }
+
+        .ambient-orb:nth-child(1) {
+            width: 600px;
+            height: 600px;
+            background: rgba(196, 163, 100, 0.06);
+            top: -10%;
+            right: -10%;
+            animation-delay: 0s;
+        }
+
+        .ambient-orb:nth-child(2) {
+            width: 400px;
+            height: 400px;
+            background: rgba(196, 163, 100, 0.04);
+            bottom: 20%;
+            left: -5%;
+            animation-delay: -7s;
+        }
+
+        .ambient-orb:nth-child(3) {
+            width: 300px;
+            height: 300px;
+            background: rgba(140, 120, 80, 0.04);
+            top: 50%;
+            right: 20%;
+            animation-delay: -14s;
+        }
+
+        @keyframes float {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -30px) scale(1.05); }
+            66% { transform: translate(-20px, 20px) scale(0.95); }
+        }
+
+        /* =================== NAV =================== */
+        .nav {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            padding: 16px 32px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(10, 10, 15, 0.8);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-bottom: 1px solid var(--border-subtle);
+            transition: background 0.3s ease;
+        }
+
+        .nav-logo {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+
+        .nav-logo img {
+            height: 32px;
+            width: auto;
+        }
+
+        .nav-links {
+            display: flex;
+            align-items: center;
+            gap: 32px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            font-size: 14px;
+            font-weight: 500;
+            letter-spacing: 0.02em;
+            transition: color 0.25s ease;
+        }
+
+        .nav-links a:hover {
+            color: var(--accent-gold-light);
+        }
+
+        .nav-cta {
+            padding: 10px 24px;
+            background: var(--accent-gold);
+            color: var(--bg-primary) !important;
+            border-radius: var(--radius-full);
+            font-weight: 600 !important;
+            font-size: 13px !important;
+            letter-spacing: 0.03em;
+            transition: all 0.3s ease;
+            box-shadow: 0 0 20px rgba(196, 163, 100, 0.2);
+        }
+
+        .nav-cta:hover {
+            background: var(--accent-gold-light) !important;
+            color: var(--bg-primary) !important;
+            transform: translateY(-1px);
+            box-shadow: 0 0 30px rgba(196, 163, 100, 0.3);
+        }
+
+        /* =================== HERO =================== */
+        .hero {
+            position: relative;
+            z-index: 1;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 120px 24px 80px;
+        }
+
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 20px;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-accent);
+            border-radius: var(--radius-full);
+            font-size: 13px;
+            color: var(--accent-gold-light);
+            font-weight: 500;
+            margin-bottom: 32px;
+            animation: fadeInUp 0.8s ease both;
+        }
+
+        .hero-badge .dot {
+            width: 6px;
+            height: 6px;
+            background: var(--accent-gold);
+            border-radius: 50%;
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .hero-logo {
+            width: 200px;
+            height: auto;
+            margin-bottom: 40px;
+            animation: fadeInUp 0.8s ease 0.1s both;
+            filter: drop-shadow(0 0 40px rgba(196, 163, 100, 0.15));
+        }
+
+        .hero h1 {
+            font-size: clamp(2.5rem, 6vw, 4.5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            max-width: 800px;
+            margin-bottom: 24px;
+            animation: fadeInUp 0.8s ease 0.2s both;
+        }
+
+        .hero h1 .highlight {
+            background: var(--gradient-hero);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .hero-subtitle {
+            font-size: clamp(1rem, 2vw, 1.25rem);
+            color: var(--text-secondary);
+            max-width: 560px;
+            line-height: 1.7;
+            font-weight: 400;
+            margin-bottom: 48px;
+            animation: fadeInUp 0.8s ease 0.3s both;
+        }
+
+        .hero-actions {
+            display: flex;
+            gap: 16px;
+            flex-wrap: wrap;
+            justify-content: center;
+            animation: fadeInUp 0.8s ease 0.4s both;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            padding: 14px 32px;
+            border-radius: var(--radius-full);
+            font-family: var(--font-sans);
+            font-size: 15px;
+            font-weight: 600;
+            text-decoration: none;
+            cursor: pointer;
+            border: none;
+            transition: all 0.3s ease;
+        }
+
+        .btn-primary {
+            background: var(--accent-gold);
+            color: var(--bg-primary);
+            box-shadow: 0 0 30px rgba(196, 163, 100, 0.2), 0 4px 16px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-gold-light);
+            transform: translateY(-2px);
+            box-shadow: 0 0 40px rgba(196, 163, 100, 0.3), 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .btn-secondary {
+            background: var(--bg-glass);
+            color: var(--text-primary);
+            border: 1px solid var(--border-subtle);
+            backdrop-filter: blur(10px);
+        }
+
+        .btn-secondary:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-accent);
+            transform: translateY(-2px);
+        }
+
+        /* =================== FLOATING PHONE MOCKUP =================== */
+        .hero-visual {
+            position: relative;
+            margin-top: 72px;
+            animation: fadeInUp 1s ease 0.5s both;
+        }
+
+        .phone-mockup {
+            width: 280px;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-subtle);
+            border-radius: 36px;
+            padding: 12px;
+            box-shadow: var(--shadow-elevated), var(--shadow-glow);
+            position: relative;
+        }
+
+        .phone-screen {
+            background: #1a1a24;
+            border-radius: 24px;
+            padding: 20px 16px;
+            min-height: 420px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .phone-chat-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+            margin-bottom: 16px;
+        }
+
+        .phone-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-gold), var(--accent-gold-dark));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 14px;
+            font-weight: 700;
+            color: var(--bg-primary);
+        }
+
+        .phone-chat-name {
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .phone-messages {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .msg {
+            padding: 10px 14px;
+            border-radius: 16px;
+            font-size: 13px;
+            line-height: 1.5;
+            max-width: 85%;
+            animation: msgAppear 0.5s ease both;
+        }
+
+        .msg-them {
+            background: rgba(255,255,255,0.06);
+            color: var(--text-primary);
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
+        }
+
+        .msg-me {
+            background: rgba(196, 163, 100, 0.15);
+            color: var(--accent-gold-light);
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
+        }
+
+        @keyframes msgAppear {
+            from { opacity: 0; transform: translateY(8px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .phone-suggestions {
+            margin-top: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .suggestion {
+            padding: 10px 14px;
+            background: linear-gradient(135deg, rgba(196, 163, 100, 0.1), rgba(196, 163, 100, 0.05));
+            border: 1px solid rgba(196, 163, 100, 0.2);
+            border-radius: 12px;
+            font-size: 12px;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.25s ease;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .suggestion:hover {
+            background: rgba(196, 163, 100, 0.15);
+            border-color: var(--accent-gold);
+            transform: translateX(4px);
+        }
+
+        .suggestion-label {
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--accent-gold);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            min-width: 48px;
+        }
+
+        .sparkle-btn {
+            position: absolute;
+            bottom: 80px;
+            right: -12px;
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: var(--accent-gold);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            box-shadow: 0 0 20px rgba(196, 163, 100, 0.4);
+            animation: sparkleFloat 3s ease-in-out infinite;
+            z-index: 2;
+        }
+
+        @keyframes sparkleFloat {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-6px); }
+        }
+
+        /* =================== SECTIONS =================== */
+        .section {
+            position: relative;
+            z-index: 1;
+            padding: 120px 24px;
+        }
+
+        .section-inner {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+
+        .section-label {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--accent-gold);
+            margin-bottom: 16px;
+        }
+
+        .section-title {
+            font-size: clamp(2rem, 4vw, 3rem);
+            font-weight: 800;
+            letter-spacing: -0.03em;
+            line-height: 1.15;
+            margin-bottom: 16px;
+        }
+
+        .section-desc {
+            font-size: 1.1rem;
+            color: var(--text-secondary);
+            max-width: 600px;
+            line-height: 1.7;
+            margin-bottom: 56px;
+        }
+
+        /* =================== FEATURES GRID =================== */
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+
+        .feature-card {
+            background: var(--gradient-card);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 32px 28px;
+            transition: all 0.4s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .feature-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 1px;
+            background: linear-gradient(90deg, transparent, var(--accent-gold-dark), transparent);
+            opacity: 0;
+            transition: opacity 0.4s ease;
+        }
+
+        .feature-card:hover {
+            background: var(--bg-card-hover);
+            border-color: var(--border-accent);
+            transform: translateY(-4px);
+            box-shadow: var(--shadow-glow);
+        }
+
+        .feature-card:hover::before {
+            opacity: 1;
+        }
+
+        .feature-icon {
+            width: 48px;
+            height: 48px;
+            border-radius: var(--radius-md);
+            background: var(--accent-glow);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            margin-bottom: 20px;
+        }
+
+        .feature-card h3 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            margin-bottom: 10px;
+            letter-spacing: -0.01em;
+        }
+
+        .feature-card p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        /* =================== HOW IT WORKS =================== */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 32px;
+            counter-reset: step;
+        }
+
+        .step {
+            position: relative;
+            padding: 32px 24px;
+            text-align: center;
+        }
+
+        .step-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            background: var(--accent-glow);
+            border: 1px solid var(--border-accent);
+            font-size: 1.3rem;
+            font-weight: 800;
+            color: var(--accent-gold);
+            margin-bottom: 20px;
+        }
+
+        .step h3 {
+            font-size: 1.05rem;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+
+        .step p {
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            line-height: 1.65;
+        }
+
+        /* =================== SUPPORTED APPS =================== */
+        .apps-row {
+            display: flex;
+            gap: 24px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+
+        .app-chip {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 28px;
+            background: var(--bg-glass);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-xl);
+            font-size: 15px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .app-chip:hover {
+            border-color: var(--border-accent);
+            background: var(--accent-glow);
+            transform: translateY(-2px);
+        }
+
+        .app-chip-icon {
+            font-size: 24px;
+        }
+
+        /* =================== TECH SECTION =================== */
+        .tech-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+        }
+
+        .tech-card {
+            background: var(--bg-glass);
+            border: 1px solid var(--border-subtle);
+            border-radius: var(--radius-lg);
+            padding: 28px 24px;
+        }
+
+        .tech-card h4 {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--accent-gold);
+            margin-bottom: 8px;
+        }
+
+        .tech-card p {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            line-height: 1.6;
+        }
+
+        .tech-card code {
+            font-family: var(--font-mono);
+            background: rgba(196, 163, 100, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            color: var(--accent-gold-light);
+        }
+
+        /* =================== FOOTER =================== */
+        .footer {
+            position: relative;
+            z-index: 1;
+            padding: 48px 24px 32px;
+            border-top: 1px solid var(--border-subtle);
+            text-align: center;
+        }
+
+        .footer-logo {
+            height: 28px;
+            opacity: 0.6;
+            margin-bottom: 16px;
+        }
+
+        .footer p {
+            font-size: 13px;
+            color: var(--text-muted);
+        }
+
+        .footer-links {
+            display: flex;
+            gap: 24px;
+            justify-content: center;
+            margin-top: 12px;
+        }
+
+        .footer-links a {
+            color: var(--text-muted);
+            text-decoration: none;
+            font-size: 13px;
+            transition: color 0.25s ease;
+        }
+
+        .footer-links a:hover {
+            color: var(--accent-gold);
+        }
+
+        /* =================== ANIMATIONS =================== */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(24px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .reveal {
+            opacity: 0;
+            transform: translateY(24px);
+            transition: all 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .reveal.visible {
+            opacity: 1;
+            transform: translateY(0);
+        }
+
+        /* =================== RESPONSIVE =================== */
+        @media (max-width: 768px) {
+            .nav {
+                padding: 12px 20px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+
+            .hero {
+                padding: 100px 20px 60px;
+            }
+
+            .hero-logo {
+                width: 150px;
+            }
+
+            .section {
+                padding: 80px 20px;
+            }
+
+            .phone-mockup {
+                width: 240px;
+            }
+
+            .features-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Ambient Background -->
+<div class="ambient-bg">
+    <div class="ambient-orb"></div>
+    <div class="ambient-orb"></div>
+    <div class="ambient-orb"></div>
+</div>
+
+<!-- Navigation -->
+<nav class="nav" id="nav">
+    <a href="#" class="nav-logo">
+        <img src="/static/logo.png" alt="Vakya">
+    </a>
+    <ul class="nav-links">
+        <li><a href="#features">Features</a></li>
+        <li><a href="#how-it-works">How it Works</a></li>
+        <li><a href="#apps">Apps</a></li>
+        <li><a href="#setup">Setup</a></li>
+        <li><a href="https://github.com" class="nav-cta">Get Started</a></li>
+    </ul>
+</nav>
+
+<!-- Hero -->
+<section class="hero" id="hero">
+    <div class="hero-badge">
+        <span class="dot"></span>
+        AI-powered replies · Privacy-first
+    </div>
+    <img src="/static/logo.png" alt="Vakya by OneZeroLabs" class="hero-logo">
+    <h1>Reply like <span class="highlight">yourself</span>, <br>powered by AI</h1>
+    <p class="hero-subtitle">
+        Smart reply suggestions right inside WhatsApp — written in <em>your</em> texting style.
+        Tap the ✨ bubble, pick a reply, done.
+    </p>
+    <div class="hero-actions">
+        <a href="#setup" class="btn btn-primary">
+            <span>⚡</span> Get Started
+        </a>
+        <a href="#features" class="btn btn-secondary">
+            <span>✦</span> Explore Features
+        </a>
+    </div>
+
+    <!-- Phone Mockup -->
+    <div class="hero-visual">
+        <div class="phone-mockup">
+            <div class="sparkle-btn">✨</div>
+            <div class="phone-screen">
+                <div class="phone-chat-header">
+                    <div class="phone-avatar">R</div>
+                    <span class="phone-chat-name">Rahul</span>
+                </div>
+                <div class="phone-messages">
+                    <div class="msg msg-them" style="animation-delay: 0.6s">Hey, can we push tomorrow's meeting to 4pm?</div>
+                    <div class="msg msg-me" style="animation-delay: 0.9s">Sure, works for me 👍</div>
+                    <div class="msg msg-them" style="animation-delay: 1.2s">Also, did you get a chance to review the designs?</div>
+                </div>
+                <div class="phone-suggestions">
+                    <div class="suggestion" style="animation: msgAppear 0.5s ease 1.6s both">
+                        <span class="suggestion-label">Accept</span>
+                        <span>Yeah I checked them, looks clean 🔥</span>
+                    </div>
+                    <div class="suggestion" style="animation: msgAppear 0.5s ease 1.8s both">
+                        <span class="suggestion-label">Delay</span>
+                        <span>Not yet, will look at it tonight</span>
+                    </div>
+                    <div class="suggestion" style="animation: msgAppear 0.5s ease 2.0s both">
+                        <span class="suggestion-label">Clarify</span>
+                        <span>Which file are you talking about?</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Features -->
+<section class="section" id="features">
+    <div class="section-inner">
+        <div class="reveal">
+            <span class="section-label">✦ Features</span>
+            <h2 class="section-title">Built for the way <br>you actually text</h2>
+            <p class="section-desc">
+                Vakya learns your tone, slang, and emoji habits — then suggests replies that sound like you wrote them.
+            </p>
+        </div>
+        <div class="features-grid">
+            <div class="feature-card reveal">
+                <div class="feature-icon">🎯</div>
+                <h3>Your Style, Your Voice</h3>
+                <p>Import your WhatsApp chat exports and Vakya builds a style card capturing how you text — your sentence length, emoji use, tone, and go-to phrases.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">⚡</div>
+                <h3>Instant Suggestions</h3>
+                <p>Three reply options appear instantly — labelled by intent like Accept, Delay, or Clarify. Tap one and it's typed in; you still control Send.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">🔒</div>
+                <h3>Privacy First</h3>
+                <p>Messages are sent to your own server only when you tap the bubble. The server doesn't store them. Your data stays under your control.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">👥</div>
+                <h3>Context-Aware</h3>
+                <p>Set each contact's relationship — friend, client, professor — and Vakya adjusts formality and tone automatically. Save notes about deals, deadlines, and promises.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">🧠</div>
+                <h3>Learns Over Time</h3>
+                <p>Vakya watches what you actually send and builds a reply bank of your real responses. Over time, it can suggest past replies instantly without AI.</p>
+            </div>
+            <div class="feature-card reveal">
+                <div class="feature-icon">🆓</div>
+                <h3>Free to Use</h3>
+                <p>Powered by Groq's free tier — about 100 suggestions per day at zero cost. Swap in Gemini, Ollama, or any OpenAI-compatible API anytime.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- How it Works -->
+<section class="section" id="how-it-works" style="background: var(--bg-secondary);">
+    <div class="section-inner">
+        <div class="reveal" style="text-align: center;">
+            <span class="section-label">⚙ How it Works</span>
+            <h2 class="section-title">Up and running in minutes</h2>
+            <p class="section-desc" style="margin-left: auto; margin-right: auto;">
+                No complicated setup. Just a free API key and a USB cable.
+            </p>
+        </div>
+        <div class="steps">
+            <div class="step reveal">
+                <div class="step-number">1</div>
+                <h3>Get a Free Key</h3>
+                <p>Sign up at Groq and grab a free API key — no credit card needed.</p>
+            </div>
+            <div class="step reveal">
+                <div class="step-number">2</div>
+                <h3>Start the Server</h3>
+                <p>Double-click <code>server.bat</code> and the backend starts at localhost:8000.</p>
+            </div>
+            <div class="step reveal">
+                <div class="step-number">3</div>
+                <h3>Connect Your Phone</h3>
+                <p>Plug in via USB, run <code>phone.bat</code>, and enable Vakya in Accessibility settings.</p>
+            </div>
+            <div class="step reveal">
+                <div class="step-number">4</div>
+                <h3>Tap ✨ and Reply</h3>
+                <p>Open any chat, tap the sparkle bubble, and pick one of three replies.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Supported Apps -->
+<section class="section" id="apps">
+    <div class="section-inner" style="text-align: center;">
+        <div class="reveal">
+            <span class="section-label">📱 Supported Apps</span>
+            <h2 class="section-title">Works where you chat</h2>
+            <p class="section-desc" style="margin-left: auto; margin-right: auto;">
+                Vakya reads any messenger's screen and suggests replies — no app integration needed.
+            </p>
+        </div>
+        <div class="apps-row reveal">
+            <div class="app-chip">
+                <span class="app-chip-icon">💬</span>
+                WhatsApp
+            </div>
+            <div class="app-chip">
+                <span class="app-chip-icon">✈️</span>
+                Telegram
+            </div>
+            <div class="app-chip">
+                <span class="app-chip-icon">📸</span>
+                Instagram
+            </div>
+            <div class="app-chip">
+                <span class="app-chip-icon">💭</span>
+                Google Messages
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Setup / Tech -->
+<section class="section" id="setup" style="background: var(--bg-secondary);">
+    <div class="section-inner">
+        <div class="reveal">
+            <span class="section-label">🛠 Setup</span>
+            <h2 class="section-title">Flexible by design</h2>
+            <p class="section-desc">
+                Choose your AI provider, run locally or on a server. You own the stack.
+            </p>
+        </div>
+        <div class="tech-grid">
+            <div class="tech-card reveal">
+                <h4>Default Provider</h4>
+                <p><code>Groq</code> — free, fast, no credit card. ~100 suggestions/day on the free tier.</p>
+            </div>
+            <div class="tech-card reveal">
+                <h4>Alternatives</h4>
+                <p><code>Gemini</code>, <code>Ollama</code> (local), <code>OpenAI</code>-compatible, or <code>Anthropic</code>. Just set one env var.</p>
+            </div>
+            <div class="tech-card reveal">
+                <h4>Fallback Chain</h4>
+                <p>Set <code>VAKYA_FALLBACK_PROVIDERS</code> and Vakya auto-switches when quota runs out.</p>
+            </div>
+            <div class="tech-card reveal">
+                <h4>Self-Hosted</h4>
+                <p>A Python FastAPI server you run yourself. Nothing is stored. Deploy behind HTTPS for production.</p>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer class="footer">
+    <img src="/static/logo.png" alt="Vakya" class="footer-logo">
+    <p>Vakya by OneZeroLabs · Reply suggestions in your own texting style</p>
+    <div class="footer-links">
+        <a href="/docs">API Docs</a>
+        <a href="/health">Health Check</a>
+        <a href="https://console.groq.com/keys">Get Groq Key</a>
+    </div>
+</footer>
+
+<!-- Scroll Reveal Script -->
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        // Intersection Observer for reveal animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach((entry, index) => {
+                if (entry.isIntersecting) {
+                    // Stagger the animations for elements in the same section
+                    const siblings = entry.target.parentElement.querySelectorAll('.reveal');
+                    const idx = Array.from(siblings).indexOf(entry.target);
+                    entry.target.style.transitionDelay = `${idx * 0.1}s`;
+                    entry.target.classList.add('visible');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, {
+            threshold: 0.1,
+            rootMargin: '0px 0px -40px 0px'
+        });
+
+        document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+        // Smooth nav background on scroll
+        const nav = document.getElementById('nav');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 50) {
+                nav.style.background = 'rgba(10, 10, 15, 0.95)';
+            } else {
+                nav.style.background = 'rgba(10, 10, 15, 0.8)';
+            }
+        });
+
+        // Suggestion tap animation
+        document.querySelectorAll('.suggestion').forEach(el => {
+            el.addEventListener('click', () => {
+                el.style.background = 'rgba(196, 163, 100, 0.25)';
+                el.style.borderColor = 'var(--accent-gold)';
+                setTimeout(() => {
+                    el.style.background = '';
+                    el.style.borderColor = '';
+                }, 400);
+            });
+        });
+    });
+</script>
+
+</body>
+</html>

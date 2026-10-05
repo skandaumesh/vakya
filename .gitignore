@@ -1,0 +1,26 @@
+# Python
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+
+# Secrets and personal data
+.env
+*.style.json
+backend/eval/results/
+WhatsApp Chat*.txt
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/.idea/
+*.iml
+*.apk
+
+# Release secrets (signing key, app key, server address)
+android/vakya.properties
+android/keystore/
+*.jks
+*.keystore

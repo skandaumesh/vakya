@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Vakya</string>
+    <string name="a11y_description">Shows a Vakya bubble in WhatsApp, Telegram, Instagram and Messages. When you tap it, Vakya reads the messages on screen and suggests replies in your style, then types the one you pick into the message box. It never sends anything for you.</string>
+    <string name="disclosure">Vakya uses Android\'s Accessibility service to:\n\n• Read the messages visible in the chat you\'re in (WhatsApp, Telegram, Instagram, Messages) when you tap the Vakya bubble.\n• Type the reply you pick into the message box. It never presses Send.\n• If \"Learn from messages I send\" is on, save the messages you send in those apps, and what they were replying to, on this phone only. This teaches Vakya your style and builds your reply bank: your own past replies, suggested instantly without AI.\n\nTo make suggestions, the visible messages (plus a small cropped copy of the newest photo or sticker they sent, if \"Look at photos and stickers\" is on), your style card, a few of your past messages to that contact and your notes about them are sent to your Vakya server, which passes them to the AI service it is set up with (such as Groq or Google Gemini). The Vakya server doesn\'t store them; the AI service\'s own privacy terms apply.</string>
+</resources>

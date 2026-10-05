@@ -1,0 +1,66 @@
+{
+  "casual_kanglish": {
+    "traits": {
+      "summary": "Very short, casual texts, usually one line. Relaxed and jokey with friends, still casual but more careful with clients. Rarely writes full sentences.",
+      "language_mix": "English mixed with Kannada words in Latin script (~35% Kannada), e.g. 'sari da', 'bartini', 'gottilla maga'.",
+      "fillers": [
+        "bro",
+        "da",
+        "maga",
+        "macha"
+      ],
+      "signature_phrases": [
+        "ok da",
+        "sari bro",
+        "will do",
+        "done 👍",
+        "haha nice",
+        "bartini"
+      ],
+      "emoji_habits": "Uses 😂 for anything funny and 👍 to confirm, usually one emoji at the end, never more than two.",
+      "punctuation_and_casing": "Almost always lowercase, no full stops, uses '..' when trailing off and '??' for questions.",
+      "avoid": [
+        "formal greetings like 'Dear' or 'Hope you are well'",
+        "long paragraphs",
+        "exclamation marks"
+      ]
+    },
+    "stats": {
+      "message_count": 412,
+      "avg_words": 5.2,
+      "median_words": 4,
+      "emoji_rate": 0.31,
+      "top_emojis": [
+        "😂",
+        "👍",
+        "🙏",
+        "🔥"
+      ],
+      "lowercase_start_rate": 0.93,
+      "ends_with_period_rate": 0.02
+    }
+  },
+  "_examples": {
+    "casual_kanglish": {
+      "friend": [
+        "ok da will do",
+        "sari bro bartini 7 ge",
+        "haha nice 😂",
+        "gottilla maga, will check and tell",
+        "nange swalpa time beku da.. tomorrow ok??"
+      ],
+      "work": [
+        "yes sure, will send by evening",
+        "ok will check and update",
+        "done 👍",
+        "send me the figma link once",
+        "sure, can we do a quick call tomorrow?"
+      ],
+      "family": [
+        "haa amma, oota aaytu",
+        "will call after work",
+        "ok amma 👍"
+      ]
+    }
+  }
+}
