@@ -1,0 +1,68 @@
+Vakya: reply suggestions in your own style, right inside WhatsApp
+(Android phone: steps 1-4. Laptop with WhatsApp Web: see the end.)
+
+1. Install
+   Google blocks apps from outside the Play Store that use Accessibility
+   ("App blocked to protect your device"), because scam apps misuse it.
+   Vakya needs Accessibility to read the chat and type your reply, so:
+
+   a. Pause Play Protect for a minute:
+      Play Store → your profile picture → Play Protect → ⚙ (top right) →
+      turn OFF "Scan apps with Play Protect".
+   b. Open Vakya-0.4.0.apk → Install.
+      (If it says "install unknown apps is blocked", tap Settings, allow it
+      for WhatsApp/Files, and go back.)
+   c. Turn "Scan apps with Play Protect" back ON straight away.
+      Your phone stays protected; only Vakya was let in.
+
+2. Turn it on
+   - Open Vakya → "Turn on in Accessibility settings" → read the note → Agree.
+   - Find Vakya in the list (maybe under "Downloaded apps") and switch it ON.
+   - If the switch is grey or says "Restricted setting": go to
+     Settings → Apps → Vakya → ⋮ (top right) → "Allow restricted settings",
+     then switch it on again.
+
+3. Use it
+   - Open any WhatsApp chat and tap the message box.
+   - Tap the round Vakya bubble above it → pick a reply → it's typed for you.
+     You still press Send yourself.
+   - Choose a style at the top: My style · Professional · Short · Gen Z.
+   - Write it for me: type what you want to say in your own words
+     ("ask him if he's coming tomorrow"), then tap the bubble. You get it
+     written 4 ways: My style, Professional, Short and Gen Z. Tap one to
+     replace what you typed.
+   - If your message is the last one in the chat, Vakya suggests follow-ups
+     (a nudge or an update) instead of replies.
+
+4. Make it sound like YOU (optional, recommended)
+   - In WhatsApp, open a chat you text a lot in → ⋮ → More → Export chat →
+     Without media → save the file (Files / File Manager → Download).
+   - In Vakya → "Import a WhatsApp chat" → pick that file.
+
+Good to know
+   - You get 40 free AI replies a day. Your own past replies and the built-in
+     offline replies are unlimited.
+   - Want unlimited AI? Make a free key at console.groq.com/keys and paste it
+     into Vakya → "Your own Groq key (optional)" → Save and test.
+   - Vakya reads the chat on screen only when you tap the bubble. Messages are
+     sent to the Vakya server and an AI service to write replies: Groq, or
+     Google Gemini for Kannada-English chats and when Groq is busy. The
+     server doesn't store them, but Gemini is Google's free tier, where Google
+     may use what it receives to improve its products. Your saved replies and
+     style stay on your phone (or in your browser on a laptop).
+
+On a laptop (WhatsApp Web, in Chrome, Edge or Brave)
+   1. Right-click Vakya-Desktop-0.4.0.zip → Extract All. Keep the folder somewhere safe
+      (not in Downloads, if you clear it).
+   2. Open chrome://extensions (Edge: edge://extensions) and turn ON
+      "Developer mode" (top right in Chrome, left side in Edge).
+   3. Click "Load unpacked" and pick the Vakya-Desktop-0.4.0 folder
+      (the one with manifest.json directly inside).
+   4. Click the puzzle piece in the toolbar and pin Vakya. Click the Vakya
+      icon to open its settings; it should say "Connected".
+   5. Open web.whatsapp.com (press F5 if it was already open) and open a chat.
+      Click the round Vakya button above the message box, or press Alt+V.
+      Pick a reply (or Alt+1 / Alt+2 / Alt+3) and press Enter to send.
+      Write it for me: type your idea in the box first, then press Alt+V.
+   To sound like you on the laptop too, use "Your style" in Vakya's settings
+   with a chat export (.txt) copied from your phone.

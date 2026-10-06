@@ -18,6 +18,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.replybot.R
+import com.replybot.data.ComposeResult
 import com.replybot.data.STYLES
 import com.replybot.data.SuggestResult
 import com.replybot.data.Suggestion
@@ -50,19 +51,25 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     private val night get() = (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
         Configuration.UI_MODE_NIGHT_YES
 
-    private val bg get() = if (night) 0xF71E293B.toInt() else 0xF7FFFFFF.toInt()
-    private val fg get() = if (night) 0xFFE2E8F0.toInt() else 0xFF0F172A.toInt()
-    private val muted get() = if (night) 0xFF94A3B8.toInt() else 0xFF64748B.toInt()
-    private val chipBg get() = if (night) 0xFF0F172A.toInt() else 0xFFF1F5F9.toInt()
-    private val border get() = if (night) 0xFF334155.toInt() else 0xFFE2E8F0.toInt()
-    private val accent get() = if (night) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt()
+    // OneZeroLabs colours: white + navy, or navy + gold in dark mode.
+    private val bg get() = if (night) 0xFF0E1A33.toInt() else 0xFFFFFFFF.toInt()
+    private val fg get() = if (night) 0xFFF8FAFC.toInt() else 0xFF0E1A33.toInt()
+    private val muted get() = if (night) 0xFF94A3B8.toInt() else 0xFF6E809F.toInt()
+    private val chipBg get() = if (night) 0xFF1F2A44.toInt() else 0xFFF8FAFC.toInt()
+    private val border get() = if (night) 0xFF33415C.toInt() else 0xFFECEFF4.toInt()
+    private val accent get() = if (night) 0xFFF5C86B.toInt() else 0xFF0E1A33.toInt()
+    /** Text on an accent-filled pill: white on navy, navy on gold. */
+    private val onAccent get() = if (night) 0xFF0E1A33.toInt() else 0xFFFFFFFF.toInt()
+    private val serif by lazy { ctx.resources.getFont(R.font.instrument_serif) }
 
     private var bubble: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
 
     private var panel: LinearLayout? = null
     private var panelParams: WindowManager.LayoutParams? = null
+    private lateinit var modeLabel: TextView
     private lateinit var styleRow: LinearLayout
+    private lateinit var styleScroll: HorizontalScrollView
     private lateinit var body: LinearLayout
     private lateinit var footer: TextView
     private var anchor = Rect()
@@ -120,7 +127,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
             foreground = GradientDrawable().apply {
                 shape = GradientDrawable.OVAL
                 setColor(0x00000000)
-                setStroke(px(2), if (night) 0xFF818CF8.toInt() else 0xFF4F46E5.toInt())
+                setStroke(px(2), accent)
             }
             addView(ImageView(ctx).apply {
                 setImageResource(R.mipmap.ic_launcher_foreground)
@@ -175,32 +182,58 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         hidePanel()
     }
 
-    /** The style menu, with [style] highlighted. (Who the person is, Vakya works out itself.) */
+    /** Reply mode: the style menu, with [style] highlighted. (Who the person is, Vakya works out itself.) */
     fun setHeader(style: String) {
         if (panel == null) return
+        modeLabel.text = "THEME / TONE:"
+        styleScroll.visibility = View.VISIBLE
         styleRow.removeAllViews()
         STYLES.forEach { (value, label) ->
             styleRow.addView(pill(label, selected = value == style) { cb.onStyleChange(value) }, pillMargins())
         }
     }
 
+    /** Write-it-for-me mode: every style comes back at once, so no style menu. */
+    fun setComposeHeader() {
+        if (panel == null) return
+        modeLabel.text = "WRITE IT FOR ME · YOUR TEXT IN EVERY STYLE"
+        styleScroll.visibility = View.GONE
+    }
+
     /** [pinned]: the user's own past reply, shown while the AI works on more. */
-    fun showLoading(pinned: List<Suggestion> = emptyList()) =
-        setBody(pinned.map(::card) + note(if (pinned.isEmpty()) "Reading the chat…" else "Asking AI for more…"), footerText = "")
+    fun showLoading(pinned: List<Suggestion> = emptyList(), text: String = "Reading the chat…") =
+        setBody(pinned.map(::card) + note(if (pinned.isEmpty()) text else "Asking AI for more…"), footerText = "")
 
     fun showError(message: String, pinned: List<Suggestion> = emptyList()) =
         setBody(pinned.map(::card) + note(message), footerText = "")
 
-    fun showResult(r: SuggestResult, pinned: List<Suggestion> = emptyList()) {
+    /** [followUp]: my message was the last one, so these are follow-ups, not replies. */
+    fun showResult(r: SuggestResult, pinned: List<Suggestion> = emptyList(), followUp: Boolean = false) {
         val language = r.language.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
         // What Vakya understood, first: if this is wrong, the replies will be too.
-        val understood = r.meaning.takeIf { it.isNotBlank() }?.let { listOf(note("💬 $it")) }.orEmpty()
-        setBody(understood + (pinned + r.suggestions).take(MAX_CARDS).map(::card), footerText = "${r.intent.lowercase().replace('_', ' ')}$language")
+        val understood = listOfNotNull(
+            note("↪ Your message is the last one, so these are follow-ups.").takeIf { followUp },
+            r.meaning.takeIf { it.isNotBlank() }?.let { note("💬 $it") },
+        )
+        setBody(
+            understood + (pinned + r.suggestions).take(MAX_CARDS).map(::card),
+            footerText = "${r.intent.lowercase().replace('_', ' ')}$language\nTip: type an idea in the box first, then tap Vakya to get it written in every style.",
+        )
     }
 
-    /** Suggestions made on the phone (reply bank + quick replies); [note] explains why, e.g. an AI error. */
-    fun showOffline(items: List<Suggestion>, note: String? = null) =
-        setBody(items.take(MAX_CARDS).map(::card) + listOfNotNull(note?.let(::note)), footerText = "offline suggestions · no AI")
+    fun showCompose(r: ComposeResult) {
+        val understood = r.meaning.takeIf { it.isNotBlank() }?.let { listOf(note("✍️ $it")) }.orEmpty()
+        val language = r.language.takeIf { it.isNotBlank() }?.let { "$it · " }.orEmpty()
+        setBody(understood + r.variants.take(MAX_CARDS).map(::card), footerText = "${language}tap one to replace your text")
+    }
+
+    /** Suggestions made on the phone (reply bank + quick replies); [reason] explains why, e.g. an AI error. */
+    fun showOffline(items: List<Suggestion>, reason: String? = null) =
+        setBody(
+            // The reason first: these are basic replies, and the user should know why.
+            listOfNotNull(reason?.let { note("⚠️ $it") }) + items.take(MAX_CARDS).map(::card),
+            footerText = if (items.isEmpty()) "" else "basic offline replies · no AI",
+        )
 
     /** Only the user's own past replies (no AI call), with a way to ask the AI anyway. */
     fun showOwnReplies(items: List<Suggestion>) =
@@ -270,9 +303,9 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         header.addView(logoView)
         header.addView(TextView(ctx).apply {
             text = "Vakya"
-            textSize = 14f
+            textSize = 20f
             setTextColor(fg)
-            typeface = Typeface.DEFAULT_BOLD
+            typeface = serif
         }, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
         header.addView(TextView(ctx).apply {
             text = "✕"
@@ -284,22 +317,23 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         })
         root.addView(header)
 
-        // Theme / Tone Label
-        val themeLabel = TextView(ctx).apply {
+        // "THEME / TONE:" above the style menu, or what write-it-for-me mode does.
+        modeLabel = TextView(ctx).apply {
             text = "THEME / TONE:"
             textSize = 10f
             typeface = Typeface.DEFAULT_BOLD
             setTextColor(muted)
             setPadding(px(2), px(6), 0, px(2))
         }
-        root.addView(themeLabel)
+        root.addView(modeLabel)
 
         styleRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
-        // Five style pills may not fit a narrow phone; let the row scroll sideways.
-        root.addView(HorizontalScrollView(ctx).apply {
+        // The style pills may not fit a narrow phone; let the row scroll sideways.
+        styleScroll = HorizontalScrollView(ctx).apply {
             isHorizontalScrollBarEnabled = false
             addView(styleRow)
-        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP_CONTENT))
+        }
+        root.addView(styleScroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP_CONTENT))
 
         body = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         root.addView(body)
@@ -342,7 +376,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     private fun pill(label: String, selected: Boolean, onClick: () -> Unit) = TextView(ctx).apply {
         text = label
         textSize = 13f
-        setTextColor(if (selected) 0xFFFFFFFF.toInt() else fg)
+        setTextColor(if (selected) onAccent else fg)
         background = rounded(if (selected) accent else chipBg, 999)
         setPadding(px(12), px(5), px(12), px(5))
         setOnClickListener { onClick() }

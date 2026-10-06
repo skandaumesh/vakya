@@ -21,7 +21,14 @@ services:
         sync: false
       - key: VAKYA_DAILY_LIMIT       # AI replies per phone per day on the shared key
         value: "40"
-      - key: VAKYA_KANGLISH_PROVIDER # no Gemini free tier for other people's chats
-        value: ""
+      # Gemini (free tier) reads Kannada-English far better than Groq's models, and takes
+      # over when Groq's daily limit is used up. Google may use free-tier chats to improve
+      # its products; the app and install guide tell users so.
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: VAKYA_FALLBACK_PROVIDERS
+        value: gemini
+      - key: VAKYA_KANGLISH_PROVIDER
+        value: gemini
       - key: VAKYA_PHONE_LINK        # USB phone linking is for local testing only
         value: "0"

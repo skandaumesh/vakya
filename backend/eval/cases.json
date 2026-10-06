@@ -288,5 +288,29 @@
     "messages": [["them", "Can you finish the homepage by Friday? We have an investor demo on Saturday."]],
     "then": [["them", "Hey, any update?"]],
     "expect": {"intents": ["REQUEST"], "lang": "any", "then_mention": ["friday", "demo", "saturday"]}
+  },
+  {
+    "id": "kanglish-new-topic",
+    "title": "Rahul",
+    "relationship": "friend",
+    "style": "mine",
+    "messages": [["them", "naale movie ge hogona?"], ["me", "houdu maga, 6 ge show"], ["them", "sari"], ["them", "ninne exam hegaythu? results yavaga?"]],
+    "expect": {"intents": ["QUESTION", "CASUAL"], "lang": "kanglish", "none_mention": ["movie", "show"]}
+  },
+  {
+    "id": "kanglish-borrow-bike",
+    "title": "Kiran",
+    "relationship": "friend",
+    "style": "mine",
+    "messages": [["them", "maga nin bike naale beku, sigutha? ondu kelsa ide"]],
+    "expect": {"intents": ["REQUEST"], "lang": "kanglish", "mention": ["bike", "sari", "thogo", "tago", "illa", "beku", "kelsa", "yaake", "yenu"]}
+  },
+  {
+    "id": "follow-up-my-message-last",
+    "title": "Client Priya",
+    "relationship": "client",
+    "style": "mine",
+    "messages": [["them", "Hi, can you share the logo files today?"], ["me", "Sure, will send by evening"]],
+    "expect": {"intents": ["FOLLOW_UP"], "lang": "english", "none_mention": ["here are", "here is", "i've sent", "i have sent", "attached"]}
   }
 ]

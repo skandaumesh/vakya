@@ -136,6 +136,16 @@ class ReplyBank(private val file: File?) {
         /** Long messages rarely match a past one closely enough, so ask for more. */
         fun strongScoreFor(query: String) = if (query.split(' ').size > 12) 0.9 else STRONG_SCORE
 
+        /** Near-identical match of a short message ("gm", "thanks da"). */
+        const val EXACT_SCORE = 0.95
+
+        /**
+         * Only these skip the AI: for anything longer, an old reply to a similar message
+         * can carry old details (a time, a place) into a new conversation.
+         */
+        fun answersWithoutAi(query: String, score: Double) =
+            score >= EXACT_SCORE && query.trim().split(Regex("\\s+")).size <= 4
+
         @Volatile
         private var instance: ReplyBank? = null
 

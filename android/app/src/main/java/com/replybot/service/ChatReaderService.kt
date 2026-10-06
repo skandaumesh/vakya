@@ -36,6 +36,12 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
 
         /** Label on suggestions that are the user's own past replies. */
         const val OWN_REPLY_LABEL = "Your reply"
+
+        /** Time for the chat list to settle after jumping to the newest message. */
+        private const val SCROLL_SETTLE_MS = 450L
+
+        private const val FOLLOW_UP_OFFLINE =
+            "Your message is the last one, so there's nothing new to reply to. Follow-up ideas need AI."
     }
 
     /** The chat the panel is showing suggestions for. */
@@ -114,24 +120,37 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
 
     // ---------- Suggestions ----------
 
-    override fun onBubbleTap() {
+    override fun onBubbleTap() = readAndOpen(scrolled = false)
+
+    private fun readAndOpen(scrolled: Boolean) {
         val root = rootInActiveWindow ?: return
         val (pkg, input) = chatInput() ?: return
+        // Make sure the newest messages are on screen before reading them.
+        if (!scrolled && ChatReader.scrollToNewest(root, pkg)) {
+            main.postDelayed({ readAndOpen(scrolled = true) }, SCROLL_SETTLE_MS)
+            return
+        }
         val screen = ChatReader.bounds(root)
         val snap = ChatReader.read(root, input, pkg, screen)
         val title = snap.title ?: "Unknown chat"
-        val draft = ChatReader.draftText(input)
+        val draft = ChatReader.draftText(input).trim()
         val inputRect = ChatReader.bounds(input)
 
         val open = { messages: List<ChatMsg> ->
             val s = Session(pkg, Store.key(pkg, title), title, messages, draft)
             session = s
             overlay.showPanel(inputRect, screen)
-            updateHeader()
-            if (messages.none { !it.fromMe }) {
-                overlay.showError("No messages to reply to on screen yet.")
-            } else {
-                requestSuggestions()
+            when {
+                // Text in the box: write what the user means, in every style.
+                draft.isNotEmpty() -> requestCompose()
+                messages.isEmpty() -> {
+                    updateHeader()
+                    overlay.showError("Nothing on screen to reply to. Tip: type what you want to say in the box, then tap Vakya to get it written in every style.")
+                }
+                else -> {
+                    updateHeader()
+                    requestSuggestions()
+                }
             }
         }
 
@@ -163,9 +182,13 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         val contact = store.contact(s.key)
         val seq = ++requestSeq
 
+        // Their message to answer; null when my message is the last one (follow-up mode:
+        // their older messages were already answered, so never match or reply to those).
+        val query = turnToAnswer(s.messages)
+        val followUp = query == null
+
         // First the user's own past replies: free, instant, offline, and exactly their voice.
         // Only for "Mine"; the other styles are deliberately not the user's voice.
-        val query = theirLatestTurn(s.messages)
         val relationship = contact.relationship ?: contact.guessedRelationship
         val own = if (store.style == "mine" && query != null) {
             bank.search(query, s.key, onlyThisChat = relationship in NON_FRIEND)
@@ -176,14 +199,18 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
 
         // AI switched off: everything comes from the phone (no server, nothing sent anywhere).
         if (!store.useAi) {
-            overlay.showOffline(offlineSuggestions(query, ownCards, contact))
+            if (followUp) overlay.showOffline(emptyList(), FOLLOW_UP_OFFLINE)
+            else overlay.showOffline(offlineSuggestions(query, ownCards, contact))
             return
         }
-        if (!forceAi && own.isNotEmpty() && own.first().score >= ReplyBank.strongScoreFor(query.orEmpty())) {
-            overlay.showOwnReplies(ownCards)  // close match: no AI call, no quota used
+        // A near-identical short message ("gm", "thanks da"): my usual reply, no AI call.
+        if (!forceAi && query != null && own.isNotEmpty() && ReplyBank.answersWithoutAi(query, own.first().score)) {
+            overlay.showOwnReplies(ownCards)
             return
         }
-        val pinned = ownCards.take(1)
+        // Otherwise the AI answers; a close past reply of mine is pinned on top.
+        val pinned = own.filter { it.score >= ReplyBank.strongScoreFor(query.orEmpty()) }
+            .take(1).map { Suggestion(OWN_REPLY_LABEL, it.reply) }
         overlay.showLoading(pinned)
 
         val body = ReplyApi.suggestBody(
@@ -215,10 +242,48 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
                     .onSuccess { r ->
                         store.applyResult(s.key, r)
                         updateHeader()
-                        overlay.showResult(r, pinned)
+                        overlay.showResult(r, pinned, followUp)
                     }
-                    // AI out of quota, server off, no internet...: still offer something useful.
-                    .onFailure { overlay.showOffline(offlineSuggestions(query, ownCards, contact), ReplyApi.describe(it)) }
+                    // AI out of quota, server off, no internet...: still offer something useful,
+                    // and say plainly that these are basic replies.
+                    .onFailure {
+                        val why = ReplyApi.describe(it)
+                        if (followUp) overlay.showOffline(emptyList(), "$why $FOLLOW_UP_OFFLINE")
+                        else overlay.showOffline(offlineSuggestions(query, ownCards, contact), "$why Showing basic offline replies instead.")
+                    }
+            }
+        }
+    }
+
+    /** Write it for me: the user's own words in the box, written out in every style. */
+    private fun requestCompose() {
+        val s = session ?: return
+        val contact = store.contact(s.key)
+        val seq = ++requestSeq
+        overlay.setComposeHeader()
+        if (!store.useAi) {
+            overlay.showError("Writing it for you needs AI. Turn on \"Use AI\" in Vakya.")
+            return
+        }
+        overlay.showLoading(text = "Writing it in every style…")
+        val body = ReplyApi.composeBody(
+            app = SUPPORTED.getValue(s.pkg),
+            title = s.title,
+            messages = s.messages,
+            relationship = contact.relationship ?: contact.guessedRelationship,
+            styleCardJson = store.styleCardJson,
+            examples = contact.examples.toList(),
+            memory = contact.memory.toList(),
+            intent = s.draft,
+        )
+        val api = store.api()
+        io.execute {
+            val result = runCatching { api.compose(body) }
+            main.post {
+                if (seq != requestSeq || session?.key != s.key) return@post
+                result
+                    .onSuccess { overlay.showCompose(it) }
+                    .onFailure { overlay.showError(ReplyApi.describe(it)) }
             }
         }
     }
@@ -234,7 +299,14 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
 
     override fun onAiRequested() = requestSuggestions(forceAi = true)
 
-    /** Their newest messages (after my last one), as one line to match against. */
+    /** Their newest messages, if the last message is theirs (else null: nothing new to answer). */
+    private fun turnToAnswer(messages: List<ChatMsg>): String? =
+        if (messages.lastOrNull()?.fromMe == false) theirLatestTurn(messages) else null
+
+    /**
+     * Their newest messages before my last one, as one line. For learning what I sent:
+     * by the time the box clears, my new message may already be on screen.
+     */
     private fun theirLatestTurn(messages: List<ChatMsg>): String? {
         val upToTheirs = messages.dropLastWhile { it.fromMe }
         val turn = upToTheirs.takeLastWhile { !it.fromMe }.takeLast(3)

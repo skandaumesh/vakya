@@ -25,6 +25,18 @@ data class SuggestResult(
     val latencyMs: Int,
 )
 
+/**
+ * "Write it for me": what the user typed in the box (an idea in their own words),
+ * written out once per style. Each variant's label is the style's name.
+ */
+data class ComposeResult(
+    /** What Vakya understood the user wants to say, in plain English. */
+    val meaning: String,
+    val language: String,
+    val variants: List<Suggestion>,
+    val latencyMs: Int,
+)
+
 /** What Vakya knows about one chat. Lives only on the phone. */
 class ContactRecord(
     /** Set by the user; wins over the model's guess. */

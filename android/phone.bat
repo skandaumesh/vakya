@@ -29,7 +29,7 @@ echo Installing Vakya...
 "%ADB%" install -r "%APK%" || (pause & exit /b 1)
 
 rem The phone's localhost:8000 now reaches this PC's server over the USB cable.
-"%ADB%" reverse tcp:8000 tcp:8000 || (pause & exit /b 1)
+"%ADB%" reverse tcp:8000 tcp:8000 || exit /b 1
 
 echo.
 echo Done. On the phone:
@@ -39,3 +39,4 @@ echo   3. Open a WhatsApp chat, tap the message box and look for the bubble.
 echo If you unplug the phone, run this again to reconnect.
 echo.
 pause
+

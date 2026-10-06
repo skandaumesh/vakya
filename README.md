@@ -27,6 +27,9 @@ try.bat --export "WhatsApp Chat with Rahul.txt" --rel friend
    - tap **Turn on in Accessibility settings** and enable Vakya
 5. Open a WhatsApp chat, tap the message box and tap ✨.
 
+**5. Use it on a laptop (WhatsApp Web)**
+Run `backend\.venv\Scripts\python desktop\build.py`, and load the `release\Vakya-Desktop` folder it makes at `chrome://extensions` → Developer mode → **Load unpacked**. Details are in [desktop/README.md](desktop/README.md).
+
 ## Limits
 
 Groq's free tier allows about **100 suggestions a day**. When that runs out, the app says when to try again. Other free and paid providers are listed in [backend/README.md](backend/README.md).
@@ -35,3 +38,4 @@ Groq's free tier allows about **100 suggestions a day**. When that runs out, the
 
 - [backend/README.md](backend/README.md): providers, server API, quality eval
 - [android/README.md](android/README.md): app internals and code map
+- [desktop/README.md](desktop/README.md): WhatsApp Web extension (install, build, test)

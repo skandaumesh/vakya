@@ -54,6 +54,7 @@ The first run builds a style card from your messages and saves it as `<chat>.sty
 | Endpoint | Body | Returns |
 |---|---|---|
 | `POST /suggest` | chat messages, relationship, style, style card, examples, memory, draft | intent, 3 `{label, text}` options, memory updates |
+| `POST /compose` | `intent` (what I want to say, in rough words), plus the chat, relationship, style card, examples, memory | `meaning` and the message once per style: `mine`, `professional`, `short`, `genz` |
 | `POST /style-card` | `{"my_messages": [...]}` (5+) | style card to store on the device |
 | `GET /health` | | `{"ok": true, "model": "groq/openai/gpt-oss-120b"}` |
 

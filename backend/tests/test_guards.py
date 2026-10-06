@@ -169,3 +169,11 @@ def test_style_card_only_sent_for_mine():
         out = render_suggest_input(req(style=style, examples=["ok da"]))
         assert "<my_style>" not in out and "<my_past_messages_in_this_chat>" not in out
     assert "<my_style>" in render_suggest_input(req(style="mine"))
+
+
+def test_assistant_phrases_are_cut_from_options():
+    from app.llm import strip_ai_phrases
+    assert strip_ai_phrases("Will share the logo files by 6. Let me know if you need anything else.") == "Will share the logo files by 6."
+    assert strip_ai_phrases("Feel free to call me anytime!") == "Feel free to call me anytime!"  # nothing left: keep
+    assert strip_ai_phrases("sari maga, bartini") == "sari maga, bartini"
+    assert strip_ai_phrases("Hi Priya, sorry for the delay—I'll share them soon") == "Hi Priya, sorry for the delay, I'll share them soon"

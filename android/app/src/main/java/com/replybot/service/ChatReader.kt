@@ -148,6 +148,34 @@ object ChatReader {
 
     fun bounds(node: AccessibilityNodeInfo): Rect = Rect().also(node::getBoundsInScreen)
 
+    private val SCROLL_DOWN = Regex("scroll to (the )?bottom|jump to (the )?(bottom|latest)", RegexOption.IGNORE_CASE)
+
+    /**
+     * WhatsApp opens a chat at the first unread message, so the newest ones can be
+     * below the screen. Taps its "scroll to bottom" button if it's showing; returns
+     * true if it did (read the chat again after the list settles).
+     */
+    fun scrollToNewest(root: AccessibilityNodeInfo, pkg: String): Boolean {
+        val button = root.findAccessibilityNodeInfosByViewId("$pkg:id/scroll_bottom").firstOrNull { it.isVisibleToUser }
+            ?: findNode(root) { it.isVisibleToUser && it.contentDescription?.let(SCROLL_DOWN::containsMatchIn) == true }
+            ?: return false
+        var node: AccessibilityNodeInfo? = button
+        while (node != null && !node.isClickable) node = node.parent
+        return node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+    }
+
+    private fun findNode(root: AccessibilityNodeInfo, match: (AccessibilityNodeInfo) -> Boolean): AccessibilityNodeInfo? {
+        val stack = arrayListOf(root)
+        var seen = 0
+        while (stack.isNotEmpty() && seen < MAX_NODES) {
+            val node = stack.removeAt(stack.lastIndex)
+            seen++
+            if (match(node)) return node
+            for (i in node.childCount - 1 downTo 0) node.getChild(i)?.let { stack.add(it) }
+        }
+        return null
+    }
+
     private fun collectTexts(root: AccessibilityNodeInfo): List<Pair<Rect, String>> {
         val out = mutableListOf<Pair<Rect, String>>()
         val stack = arrayListOf(root)

@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Vakya settings</title>
+  <style>
+    @font-face { font-family: "Vakya Serif"; src: url("fonts/instrument_serif.ttf") format("truetype"); }
+    :root { --navy: #0e1a33; --body: #33415c; --muted: #6e809f; --line: #eceff4; --soft: #f8fafc; --gold: #8a6420; --gold-bg: #fdf4dd; --ok: #1b9e57; --bad: #e5334a; }
+    * { box-sizing: border-box; }
+    html { background: var(--soft); }
+    body { margin: 0 auto; min-width: 380px; max-width: 560px; padding: 24px 16px; background: linear-gradient(#fff, var(--soft));
+           color: var(--navy); font: 14px/1.45 -apple-system, "Segoe UI", Inter, Roboto, sans-serif; }
+    header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+    header img { width: 48px; height: 48px; border-radius: 14px; border: 1px solid var(--line); background: #fff; }
+    h1 { margin: 0; font: 34px/1 "Vakya Serif", Georgia, serif; font-weight: 400; }
+    .tag { font-size: 10px; font-weight: 700; letter-spacing: .14em; color: var(--gold); margin-top: 4px; }
+    .card { background: #fff; border: 1px solid var(--line); border-radius: 20px; padding: 16px; margin-bottom: 12px;
+            box-shadow: 0 2px 10px rgba(14,26,51,.06); }
+    .badge { display: inline-block; font-size: 10px; font-weight: 700; letter-spacing: .14em; color: var(--gold);
+             background: var(--gold-bg); border-radius: 999px; padding: 3px 9px; margin-bottom: 6px; }
+    h2 { margin: 0 0 8px; font: 24px/1.1 "Vakya Serif", Georgia, serif; font-weight: 400; }
+    p, .muted { color: var(--body); margin: 6px 0; }
+    .muted { color: var(--muted); font-size: 12.5px; }
+    input[type=text], input[type=password], select { width: 100%; padding: 11px 13px; border: 1px solid #e2e8f0; border-radius: 12px;
+             font: inherit; color: var(--navy); background: #fff; margin: 6px 0; }
+    button { width: 100%; padding: 11px 16px; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer; margin-top: 8px;
+             border: 1px solid var(--navy); background: var(--navy); color: #fff; }
+    button.secondary { background: #fff; color: var(--navy); }
+    .status { font-size: 13px; margin-top: 8px; min-height: 1em; }
+    .ok { color: var(--ok); } .bad { color: var(--bad); }
+    .chat { border-top: 1px solid var(--line); padding: 8px 0; }
+    .chat b { display: block; }
+    .chat ul { margin: 4px 0 0; padding-left: 18px; color: var(--body); }
+    .link { color: #2563eb; }
+    pre { font: 11px/1.45 ui-monospace, Consolas, monospace; color: var(--body); background: var(--soft); border: 1px solid var(--line);
+          border-radius: 12px; padding: 10px 12px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
+    kbd { font: 12px ui-monospace, monospace; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
+  </style>
+</head>
+<body>
+  <header>
+    <img src="icons/icon128.png" alt="">
+    <div>
+      <h1>Vakya</h1>
+      <div class="tag">AI REPLY ASSISTANT · BY ONEZEROLABS</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="badge">01 HOW TO USE</div>
+    <p>Open <a class="link" href="https://web.whatsapp.com" target="_blank">web.whatsapp.com</a>, open a chat, and click the round Vakya
+       button above the message box, or press <kbd>Alt</kbd>+<kbd>V</kbd>. Pick a reply (or <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>);
+       it's typed for you, and you press Enter to send.</p>
+    <p class="muted">Only when you open Vakya, the visible messages are sent to the Vakya server and an AI service: Groq, or Google Gemini for Kannada-English chats and when Groq is busy. The server doesn't store them. Gemini is Google's free tier, where Google may use what it receives to improve its products. Your style and notes stay in this browser.</p>
+    <div id="health" class="status"></div>
+    <button id="check" class="secondary">Check WhatsApp Web</button>
+    <div id="check-status" class="status"></div>
+    <pre id="check-details" hidden></pre>
+  </div>
+
+  <div class="card">
+    <div class="badge">02 YOUR STYLE</div>
+    <h2>Sound like you</h2>
+    <div id="style-summary" class="muted">No style yet. Import a chat so "My style" replies sound like you.</div>
+    <p class="muted">On your phone: WhatsApp → a chat you text a lot in → ⋮ → More → Export chat → Without media. Copy the .txt to this computer and pick it here.</p>
+    <input id="export-file" type="file" accept=".txt,text/plain">
+    <select id="who" hidden></select>
+    <button id="build" class="secondary" hidden>Learn my style</button>
+    <div id="style-status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="badge">03 OPTIONAL</div>
+    <h2>Unlimited AI</h2>
+    <p class="muted">You share 40 free AI replies a day. A free key from <a class="link" href="https://console.groq.com/keys" target="_blank">console.groq.com/keys</a> makes them unlimited on your own quota.</p>
+    <input id="groq-key" type="password" placeholder="Your own Groq key (optional)">
+    <details>
+      <summary class="muted">Advanced: server</summary>
+      <input id="server-url" type="text" placeholder="Server address">
+      <input id="app-key" type="password" placeholder="App key">
+    </details>
+    <button id="save">Save and test</button>
+    <div id="save-status" class="status"></div>
+  </div>
+
+  <div class="card">
+    <div class="badge">04 MEMORY</div>
+    <h2>What Vakya remembers</h2>
+    <div id="chats" class="muted">Nothing yet.</div>
+  </div>
+
+  <script src="shared.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

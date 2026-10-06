@@ -23,6 +23,8 @@ class ReplyApi(
 
     fun suggest(body: JSONObject): SuggestResult = parseResult(request("POST", "/suggest", body))
 
+    fun compose(body: JSONObject): ComposeResult = parseCompose(request("POST", "/compose", body))
+
     /** Returns the style card JSON to store as-is and send back with each suggestion. */
     fun styleCard(myMessages: List<String>): String =
         request("POST", "/style-card", JSONObject().put("my_messages", JSONArray(myMessages))).toString()
@@ -86,6 +88,48 @@ class ReplyApi(
             .put("similar", JSONArray(similar.take(8).map { (them, me) ->
                 JSONObject().put("them", them.take(600)).put("me", me.take(400))
             }))
+
+        /** [intent]: what the user typed in the box, e.g. "ask him if he's coming tomorrow". */
+        fun composeBody(
+            app: String,
+            title: String,
+            messages: List<ChatMsg>,
+            relationship: String?,
+            styleCardJson: String?,
+            examples: List<String>,
+            memory: List<String>,
+            intent: String,
+        ): JSONObject = JSONObject()
+            .put("app", app)
+            .put("chat_title", title)
+            // Context and language only: no images needed to write my own message.
+            .put("messages", JSONArray(messages.takeLast(15).map {
+                JSONObject()
+                    .put("sender", if (it.fromMe) "me" else "them")
+                    .put("text", it.text.take(4000))
+                    .put("media", it.media)
+            }))
+            .put("relationship", relationship)
+            .put("style_card", styleCardJson?.let { JSONObject(it) })
+            .put("examples", JSONArray(examples.takeLast(20)))
+            .put("memory", JSONArray(memory.takeLast(30)))
+            .put("intent", intent.take(1000))
+
+        fun parseCompose(j: JSONObject): ComposeResult {
+            val labels = STYLES.toMap()
+            val arr = j.getJSONArray("variants")
+            val variants = (0 until arr.length()).mapNotNull {
+                val v = arr.getJSONObject(it)
+                val label = labels[v.optString("style")] ?: return@mapNotNull null
+                Suggestion(label, v.getString("text"))
+            }
+            return ComposeResult(
+                meaning = j.optString("meaning"),
+                language = j.optString("language"),
+                variants = variants,
+                latencyMs = j.optInt("latency_ms"),
+            )
+        }
 
         fun parseResult(j: JSONObject): SuggestResult {
             val suggestions = j.getJSONArray("suggestions").let { arr ->

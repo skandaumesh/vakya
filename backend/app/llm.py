@@ -3,9 +3,27 @@ import re
 from . import config
 
 from .errors import LLMError, LLMRefusal, MissingCredentials, ProviderTimeout, ProviderUnavailable, RateLimited
-from .prompts import FRIEND_ONLY_WORDS, NON_FRIEND, SLURS, STYLE_SYSTEM, SUGGEST_SYSTEM, detect_mix, render_style_input, render_suggest_input, strip_slurs
+from .prompts import (
+    COMPOSE_SYSTEM,
+    FRIEND_ONLY_WORDS,
+    NON_FRIEND,
+    SLURS,
+    STYLE_SYSTEM,
+    SUGGEST_SYSTEM,
+    compose_mix,
+    detect_mix,
+    render_compose_input,
+    render_style_input,
+    render_suggest_input,
+    strip_slurs,
+)
 from .providers import active_provider
 from .schemas import (
+    COMPOSE_STYLES,
+    ComposeOutput,
+    ComposeRequest,
+    ComposeResponse,
+    ComposeVariant,
     StyleCard,
     StyleTraits,
     SuggestOutput,
@@ -16,7 +34,7 @@ from .style_stats import compute_stats
 from .vision import describe_media
 
 __all__ = [
-    "suggest_replies", "build_style_card",
+    "suggest_replies", "compose_message", "build_style_card",
     "LLMError", "LLMRefusal", "MissingCredentials", "ProviderTimeout", "ProviderUnavailable", "RateLimited",
 ]
 
@@ -58,6 +76,22 @@ def strip_words(text: str, banned: set[str]) -> str:
     return out.strip() or text
 
 
+# Assistant phrases the prompt bans but models still write; the sentence holding one is cut.
+_AI_SENTENCE = re.compile(
+    r"[^.!?\n]*\b(?:let me know if you need anything else|feel free to|i hope this message finds you|"
+    r"i'?d be happy to|i would be happy to|please don'?t hesitate)\b[^.!?\n]*[.!?]?",
+    re.IGNORECASE,
+)
+
+
+def strip_ai_phrases(text: str) -> str:
+    """'Here you go. Let me know if you need anything else.' -> 'Here you go.'
+    Em dashes (a tell-tale of AI text) become commas."""
+    text = re.sub(r"\s*[—–]\s*", ", ", text).strip(" ,")
+    out = re.sub(r"\s{2,}", " ", _AI_SENTENCE.sub("", text)).strip()
+    return out or text
+
+
 def _tidy_label(label: str) -> str:
     """'NeedTime' -> 'Need time'."""
     label = label.strip()
@@ -97,7 +131,7 @@ async def suggest_replies(req: SuggestRequest) -> SuggestResponse:
         banned = FRIEND_ONLY_WORDS - {w for t in mine_here for w in re.findall(r"[a-z]+", t.lower())}
 
     cleaned = [
-        s.model_copy(update={"label": _tidy_label(s.label), "text": strip_slurs(strip_words(s.text, banned))})
+        s.model_copy(update={"label": _tidy_label(s.label), "text": strip_slurs(strip_ai_phrases(strip_words(s.text, banned)))})
         for s in out.suggestions
     ]
     suggestions = [s for s in cleaned if s.text.strip()][:3]
@@ -116,6 +150,65 @@ async def suggest_replies(req: SuggestRequest) -> SuggestResponse:
         memory_resolve=[m for m in out.memory_resolve if m in known],
         latency_ms=elapsed_ms,
     )
+
+
+def _unquote(text: str) -> str:
+    """'"are you coming?"' -> 'are you coming?' (models sometimes quote the message)."""
+    text = text.strip()
+    for a, b in ('""', "''", "“”"):
+        if len(text) > 1 and text[0] == a and text[-1] == b:
+            return text[1:-1].strip()
+    return text
+
+
+# Letter openers the model adds to "professional" despite the prompt: a text isn't a letter.
+_LETTER_OPENER = re.compile(
+    r"^(?:dear\s+[^,\n]{1,30},\s*|(?:please note that|i am writing to (?:let you know|inform you) that|"
+    r"this is (?:just )?a (?:quick )?reminder that)\s+)",
+    re.IGNORECASE,
+)
+
+
+def _not_a_letter(text: str) -> str:
+    """'Dear Sir, please note that the site is late.' -> 'The site is late.'"""
+    out = text
+    while (m := _LETTER_OPENER.match(out)) and m.end() < len(out):
+        out = out[m.end():]
+    return out[:1].upper() + out[1:] if out is not text else text
+
+
+async def compose_message(req: ComposeRequest) -> ComposeResponse:
+    """Write it for me: what I want to say, in rough words -> the message in each style."""
+    user_content = render_compose_input(req)
+    prefer = config.KANGLISH_PROVIDER if compose_mix(req) == "kanglish" else None
+    out: ComposeOutput
+    out, elapsed_ms = await _parse(COMPOSE_SYSTEM, user_content, ComposeOutput, max_tokens=1500, prefer=prefer)
+
+    source = " ".join([*(m.text for m in req.messages), *req.memory, req.intent])
+    invented = invented_amounts([v.text for v in out.variants], source)
+    if invented:
+        note = (
+            f"\n\n<note>Your previous versions stated amounts I never mentioned ({', '.join(invented)}). "
+            "Write them again without any price or amount that isn't in what I want to say, the chat or memory.</note>"
+        )
+        out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + note, ComposeOutput, max_tokens=1500, prefer=prefer)
+        elapsed_ms += retry_ms
+
+    banned: set[str] = set()
+    if req.relationship in NON_FRIEND:
+        mine_here = req.examples + [m.text for m in req.messages if m.sender == "me"] + [req.intent]
+        banned = FRIEND_ONLY_WORDS - {w for t in mine_here for w in re.findall(r"[a-z]+", t.lower())}
+    by_style: dict[str, str] = {}
+    for v in out.variants:
+        text = strip_slurs(strip_ai_phrases(strip_words(_unquote(v.text), banned)))
+        if v.style == "professional":
+            text = _not_a_letter(text)
+        if text and v.style not in by_style:
+            by_style[v.style] = text
+    variants = [ComposeVariant(style=s, text=by_style[s]) for s in COMPOSE_STYLES if s in by_style]
+    if not variants:
+        raise LLMError("model returned no message")
+    return ComposeResponse(meaning=out.meaning, language=out.language, variants=variants, latency_ms=elapsed_ms)
 
 
 async def build_style_card(my_messages: list[str]) -> StyleCard:

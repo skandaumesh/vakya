@@ -32,7 +32,10 @@ def test_reply_to_points_at_their_newest_turn():
 
 def test_reply_to_when_my_message_was_last():
     out = render_suggest_input(SuggestRequest(messages=[msg("them", "hi"), msg("me", "hey")]))
-    assert "my message was last" in out
+    reply_to = out.split("<reply_to>")[1].split("</reply_to>")[0]
+    # Follow-up mode: nothing of theirs to answer (and never my own message as if it were theirs).
+    assert "my message was last" in reply_to and "Follow-up mode" in reply_to
+    assert '"hi"' not in reply_to and '"hey"' not in reply_to
 
 
 def test_examples_already_on_screen_are_not_repeated():

@@ -128,6 +128,10 @@ def check(case: dict, personas: dict, resp: SuggestResponse) -> list[str]:
     for w in exp.get("all_mention", []):
         if not all(w in t for t in lows):
             fails.append(f"not every option contains '{w}'")
+    # Old topics answered again, or claims like "here are the files" that aren't true yet.
+    stale = [t for t in lows if any(w in t for w in exp.get("none_mention", []))]
+    if stale:
+        fails.append(f"mentions {exp['none_mention']}: {stale}")
     if exp.get("no_digits") and any(re.search(r"\d", t) for t in texts):
         fails.append("invented numbers")
     for item in exp.get("resolve", []):

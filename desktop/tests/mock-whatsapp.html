@@ -1,0 +1,167 @@
+<!doctype html>
+<!-- A stand-in for WhatsApp Web, to check the Vakya panel without a WhatsApp account.
+     Open in a browser (or headless: see desktop/README.md). Hash options, comma-separated:
+     #dark = WhatsApp dark mode, #open = open the panel, #pick = also choose reply 1, #group = group chat,
+     #draft = text already typed in the box (write-it-for-me mode), #mylast = my message is the last one,
+     #new = a redesigned page with none of the ids/classes Vakya knows (no #main, footer, header,
+            role=row, .message-in/.message-out, body.dark), plus a search box at the top. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Mock WhatsApp Web</title>
+  <link rel="stylesheet" href="../extension/content.css">
+  <style>
+    body { margin: 0; height: 100vh; display: flex; font: 14px "Segoe UI", sans-serif; background: #f0f2f5; color: #111b21; }
+    html.theme-dark body { background: #111b21; color: #e9edef; }
+    .side { width: 30%; border-right: 1px solid #d1d7db; background: #fff; padding: 16px; box-sizing: border-box; }
+    html.theme-dark .side { background: #111b21; border-color: #222d34; }
+    .side [contenteditable] { border-radius: 8px; padding: 7px 12px; background: #f0f2f5; margin: 8px 0; outline: none; }
+    html.theme-dark .side [contenteditable] { background: #202c33; }
+    .side [aria-selected="true"] { background: #f0f2f5; border-radius: 8px; padding: 4px 8px; }
+    html.theme-dark .side [aria-selected="true"] { background: #2a3942; }
+    .pane { flex: 1; display: flex; flex-direction: column; background: #efeae2; }
+    html.theme-dark .pane { background: #0b141a; }
+    .top { height: 59px; display: flex; flex-direction: column; justify-content: center; padding: 0 16px; background: #f0f2f5; }
+    html.theme-dark .top { background: #202c33; }
+    .top small { color: #667781; }
+    .msgs { flex: 1; overflow: auto; padding: 20px 7%; display: flex; flex-direction: column; gap: 6px; }
+    .msgs > div { display: flex; }
+    .in, .out { max-width: 65%; padding: 6px 9px; border-radius: 8px; background: #fff; box-shadow: 0 1px .5px rgba(0,0,0,.13); }
+    .out { margin-left: auto; background: #d9fdd3; }
+    html.theme-dark .in { background: #202c33; }
+    html.theme-dark .out { background: #005c4b; }
+    .compose { padding: 10px 16px; background: #f0f2f5; }
+    html.theme-dark .compose { background: #202c33; }
+    .compose [contenteditable] { background: #fff; border-radius: 24px; padding: 9px 16px; min-height: 20px; outline: none; }
+    html.theme-dark .compose [contenteditable] { background: #2a3942; }
+    .compose [contenteditable]:empty::before { content: "Type a message"; color: #8696a0; }
+  </style>
+</head>
+<body>
+  <script>
+    const opts = new Set(location.hash.slice(1).split(",").filter(Boolean));
+    const NEW = opts.has("new");
+    if (opts.has("dark")) {
+      document.documentElement.classList.add("theme-dark");
+      if (!NEW) document.body.classList.add("dark");
+    }
+
+    // Old layout: the ids/tags/classes WhatsApp Web has used for years. New layout: none of them.
+    const tag = (oldTag, newTag, attrs = {}) => {
+      const e = document.createElement(NEW ? newTag : oldTag);
+      for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+      return e;
+    };
+    const side = document.createElement("div");
+    side.className = "side";
+    side.innerHTML = '<b>Chats</b><div contenteditable="true" role="textbox" data-tab="3"></div>'
+      + '<div>Priya</div><div aria-selected="true"><span dir="auto" title="Rahul">Rahul</span></div><div>Client – Acme</div>';
+    const pane = tag("div", "div", NEW ? {} : { id: "main" });
+    pane.className = "pane";
+    const topBar = tag("header", "div");
+    topBar.className = "top";
+    // In the new layout the chat name isn't marked up (Vakya must use the highlighted chat in the list).
+    topBar.innerHTML = NEW ? "<div>Rahul</div><small>online</small>" : '<span dir="auto" title="Rahul">Rahul</span><small>online</small>';
+    const msgs = document.createElement("div");
+    msgs.className = "msgs";
+    const compose = tag("footer", "div");
+    compose.className = "compose";
+    compose.innerHTML = '<div contenteditable="true" role="textbox" data-tab="10"></div>';
+    if (opts.has("draft")) compose.firstChild.textContent = "ask him if he is coming for the party tomorrow";
+    pane.append(topBar, msgs, compose);
+    document.body.append(side, pane);
+
+    const chat = opts.has("group")
+      ? [["in", "Asha", "Saturday trip final aa?"], ["in", "Rahul", "naanu ready, car yaaru tagolthira?"], ["out", "Me", "nan car idhe"], ["in", "Asha", "super! 7 ge hogona?"]]
+      : [["in", "Rahul", "maga free idiya naale?"], ["out", "Me", "haan yen plan"], ["in", "Rahul", "movie ge hogona, 6 pm show"], ["in", "Rahul", "tickets naane book madthini"]];
+    if (opts.has("mylast")) chat.push(["out", "Me", "sari, 6 ge bartini"]);
+    for (const [dir, name, text] of chat) {
+      const row = tag("div", "div", NEW ? {} : { role: "row" });
+      const bubble = document.createElement("div");
+      bubble.className = (NEW ? "" : "message-" + dir + " ") + dir;
+      const copy = document.createElement("div");
+      copy.setAttribute("data-pre-plain-text", `[18:0${msgs.children.length}, 05/10/2026] ${name}: `);
+      const sel = document.createElement("span");
+      sel.className = "selectable-text";
+      sel.textContent = text;
+      copy.append(sel);
+      bubble.append(copy);
+      row.append(bubble);
+      msgs.append(row);
+    }
+
+    // What the extension would get from Chrome and from the Vakya server.
+    const store = {};
+    window.requests = [];
+    window.chrome = {
+      runtime: {
+        id: "mock",
+        getURL: (p) => "../extension/" + p,
+        onMessage: { addListener: (fn) => { window.vakyaCheck = fn; } },
+        async sendMessage(msg) {
+          window.requests.push(msg);
+          await new Promise((r) => setTimeout(r, 150));
+          if (msg.type === "compose") return { ok: true, data: {
+            meaning: "Ask him if he's coming to the party tomorrow.", language: "Kanglish",
+            variants: [
+              { style: "mine", text: "naale party ge bartiya maga?" },
+              { style: "professional", text: "Are you coming to the party tomorrow?" },
+              { style: "short", text: "naale party?" },
+              { style: "genz", text: "naale party ge bartiya? no cap it'll be fun" },
+            ],
+          } };
+          return { ok: true, data: {
+            meaning: "Rahul wants to go for the 6 pm movie tomorrow and will book the tickets.",
+            intent: "INVITATION", relationship_guess: "friend", language: "Kanglish",
+            suggestions: [
+              { label: "Accept", text: "sari maga, book madu 🔥" },
+              { label: "Delay", text: "naale confirm madthini, swalpa kelsa idhe" },
+              { label: "Clarify", text: "yav movie? yelli?" },
+            ],
+            memory_add: ["Movie with Rahul tomorrow 6 pm"], memory_resolve: [],
+          } };
+        },
+      },
+      storage: { local: {
+        async get(keys) {
+          const list = keys == null ? Object.keys(store) : [].concat(keys);
+          return Object.fromEntries(list.filter((k) => k in store).map((k) => [k, store[k]]));
+        },
+        async set(items) { Object.assign(store, items); },
+        async remove(key) { delete store[key]; },
+      } },
+    };
+    window.vakyaStore = store;
+  </script>
+  <script src="../extension/shared.js"></script>
+  <script src="../extension/content.js"></script>
+  <script>
+    const press = (key) => document.dispatchEvent(new KeyboardEvent("keydown", { key, altKey: true, bubbles: true }));
+    if (opts.has("open") || opts.has("pick")) setTimeout(() => press("v"), 800);
+    if (opts.has("pick")) setTimeout(() => press("1"), 1600);
+    // For headless --dump-dom checks: what was sent, what ended up in the box, and the settings-page check.
+    setTimeout(() => {
+      let check = null;
+      window.vakyaCheck({ type: "vakyaCheck" }, null, (r) => { check = r; });
+      const out = document.createElement("pre");
+      out.id = "check";
+      out.hidden = true;
+      out.textContent = JSON.stringify({
+        request: window.requests.at(-1)?.body ?? null,
+        box: document.querySelector('.compose [contenteditable]').innerText,
+        search: document.querySelector('.side [contenteditable]').innerText,
+        memory: window.vakyaStore,
+        panelOpen: !!document.querySelector(".vakya-panel"),
+        cards: [...document.querySelectorAll(".vakya-card-text")].map((c) => c.textContent),
+        labels: [...document.querySelectorAll(".vakya-card-label")].map((c) => c.textContent),
+        notes: [...document.querySelectorAll(".vakya-meaning, .vakya-note")].map((c) => c.textContent),
+        modeLabel: document.querySelector(".vakya-label")?.textContent ?? null,
+        type: window.requests.at(-1)?.type ?? null,
+        darkPanel: document.documentElement.classList.contains("vakya-dark"),
+        check,
+      });
+      document.body.append(out);
+    }, 2400);
+  </script>
+</body>
+</html>

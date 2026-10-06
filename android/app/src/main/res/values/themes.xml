@@ -1,10 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Light mode; values-night/themes.xml has the dark version. -->
+    <!-- Always the white OneZeroLabs theme (onezerolabs.in): white, deep navy #0E1A33. -->
     <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorAccent">#4F46E5</item>
-        <item name="android:statusBarColor">#F8FAFC</item>
-        <item name="android:navigationBarColor">#F1F5F9</item>
+        <item name="android:colorAccent">#0E1A33</item>
+        <item name="android:colorPrimary">#0E1A33</item>
+        <item name="android:statusBarColor">#FFFFFF</item>
+        <item name="android:navigationBarColor">#F8FAFC</item>
         <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
     </style>
 </resources>

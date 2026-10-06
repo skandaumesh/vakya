@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from . import config, llm, phone_link, providers, usage
 from .errors import DailyLimitReached
 from .prompts import clean_draft
-from .schemas import StyleCard, StyleCardRequest, SuggestRequest, SuggestResponse
+from .schemas import ComposeRequest, ComposeResponse, StyleCard, StyleCardRequest, SuggestRequest, SuggestResponse
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("vakya")
@@ -104,6 +104,22 @@ async def suggest(
     )
     with _ai_access(request, x_groq_key, x_vakya_device):
         return await llm.suggest_replies(req)
+
+
+@app.post("/compose", response_model=ComposeResponse, dependencies=[Depends(require_app_key)])
+async def compose(
+    req: ComposeRequest,
+    request: Request,
+    x_groq_key: str | None = Header(default=None),
+    x_vakya_device: str | None = Header(default=None),
+):
+    """Write it for me: what I want to say (one rough sentence) -> the message in each style."""
+    log.info(
+        "compose app=%s messages=%d intent_len=%d rel=%s style_card=%s examples=%d",
+        req.app, len(req.messages), len(req.intent), req.relationship, req.style_card is not None, len(req.examples),
+    )
+    with _ai_access(request, x_groq_key, x_vakya_device):
+        return await llm.compose_message(req)
 
 
 @app.post("/style-card", response_model=StyleCard, dependencies=[Depends(require_app_key)])

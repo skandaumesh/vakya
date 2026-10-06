@@ -130,3 +130,42 @@ class SuggestOutput(BaseModel):
 
 class SuggestResponse(SuggestOutput):
     latency_ms: int
+
+
+# ---------- Write it for me: one sentence in, the message in every style out ----------
+
+ComposeStyle = Literal["mine", "professional", "short", "genz"]
+COMPOSE_STYLES: tuple[str, ...] = ("mine", "professional", "short", "genz")
+
+
+class ComposeRequest(BaseModel):
+    app: str = "whatsapp"
+    chat_title: str | None = None
+    is_group: bool = False
+    messages: list[ChatMessage] = Field(
+        default_factory=list, max_length=40, description="The chat on screen, for context and language."
+    )
+    relationship: Relationship | None = None
+    style_card: StyleCard | None = None
+    examples: list[str] = Field(default_factory=list, max_length=20)
+    memory: list[str] = Field(default_factory=list, max_length=30)
+    intent: str = Field(
+        min_length=1,
+        max_length=1000,
+        description="What I want to say, in my own rough words: 'ask him if he's coming tomorrow'.",
+    )
+
+
+class ComposeVariant(BaseModel):
+    style: ComposeStyle
+    text: str = Field(description="The message exactly as it would be sent.")
+
+
+class ComposeOutput(BaseModel):
+    meaning: str = Field(default="", description="What I want to tell them, in plain English, one short sentence.")
+    language: str = Field(description="Language and script used, e.g. 'Kannada-English (Latin script)'.")
+    variants: list[ComposeVariant] = Field(description="Exactly 4, one per style: mine, professional, short, genz.")
+
+
+class ComposeResponse(ComposeOutput):
+    latency_ms: int
