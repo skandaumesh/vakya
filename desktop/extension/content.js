@@ -17,8 +17,16 @@
   let seq = 0;
   let lastResult = null;
 
-  chrome.storage.local.get(["style"]).then((s) => {
+  let panelTheme = "auto";
+  const THEMES = ["white", "navy", "black", "rose", "mint", "glass"];
+
+  chrome.storage.local.get(["style", "panelTheme"]).then((s) => {
     if (STYLES.some(([v]) => v === s.style)) style = s.style;
+    if (THEMES.includes(s.panelTheme)) panelTheme = s.panelTheme;
+  });
+  // A new background picked in settings shows at once.
+  chrome.storage.onChanged.addListener((changes) => {
+    if (changes.panelTheme) panelTheme = changes.panelTheme.newValue || "auto";
   });
 
   // ---------- Reading WhatsApp Web ----------
@@ -266,10 +274,17 @@
     return false;
   }
 
+  /** The picked background, or for Auto: white, or navy in WhatsApp's dark mode. */
+  function applyTheme(box) {
+    const root = document.documentElement;
+    for (const t of THEMES) root.classList.toggle("vakya-theme-" + t, panelTheme === t);
+    root.classList.toggle("vakya-dark", !THEMES.includes(panelTheme) && isDark(box));
+  }
+
   function refresh() {
     if (!chrome.runtime?.id) return shutDown(); // the extension was reloaded or removed
     const box = composeBox();
-    document.documentElement.classList.toggle("vakya-dark", isDark(box));
+    applyTheme(box);
     if (!box) {
       button?.remove();
       button = null;

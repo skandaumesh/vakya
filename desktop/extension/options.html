@@ -33,6 +33,9 @@
     .chat ul { margin: 4px 0 0; padding-left: 18px; color: var(--body); }
     .link { color: #2563eb; }
     .privacy { margin: 6px 0 0; padding-left: 18px; color: var(--body); }
+    .themes { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .themes button { width: auto; margin: 0; padding: 14px 16px; border-radius: 14px; font-weight: 700; font-size: 13px; }
+    .themes button.on { outline: 3px solid var(--navy); outline-offset: 2px; }
     .privacy li { margin-bottom: 7px; }
     pre { font: 11px/1.45 ui-monospace, Consolas, monospace; color: var(--body); background: var(--soft); border: 1px solid var(--line);
           border-radius: 12px; padding: 10px 12px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
@@ -74,6 +77,13 @@
       <li>To write replies, the messages on screen go to an AI service: Groq, or Google Gemini for Kannada-English chats and when Groq is busy. Gemini is Google's free tier, so Google may use what it receives to improve its products, and people at Google may review it. Add your own Groq key below and your chats never go to Google.</li>
       <li>Don't use Vakya on chats with OTPs, passwords or bank details.</li>
     </ul>
+  </div>
+
+  <div class="card">
+    <div class="badge">LOOK</div>
+    <h2>Panel background</h2>
+    <p class="muted">How the reply panel looks on WhatsApp Web. Auto follows WhatsApp's dark mode.</p>
+    <div id="themes" class="themes"></div>
   </div>
 
   <div class="card">

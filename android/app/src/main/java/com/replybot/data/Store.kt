@@ -54,6 +54,11 @@ class Store private constructor(private val file: File, private val prefs: Share
         get() = prefs.getStringSet("enabled_apps", null)?.toSet() ?: DEFAULT_APPS
         set(v) = prefs.edit().putStringSet("enabled_apps", v).apply()
 
+    /** Background of the chat panel: auto, white, navy, black, rose, mint or glass. */
+    var panelTheme: String
+        get() = prefs.getString("panel_theme", "auto") ?: "auto"
+        set(v) = prefs.edit().putString("panel_theme", v).apply()
+
     var style: String
         get() = prefs.getString("style", "mine")?.takeIf { s -> STYLES.any { it.first == s } } ?: "mine"  // e.g. old "friendly"
         set(v) = prefs.edit().putString("style", v).apply()

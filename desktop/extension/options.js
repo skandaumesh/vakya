@@ -48,6 +48,35 @@ async function checkWhatsApp() {
 
 $("check").addEventListener("click", checkWhatsApp);
 
+// ---------- Panel background ----------
+
+// Swatch colours: background, text, border (same as content.css and the phone app).
+const THEMES = [
+  ["auto", "Auto", "#ffffff", "#0e1a33", "#eceff4"],
+  ["white", "White", "#ffffff", "#0e1a33", "#eceff4"],
+  ["navy", "Navy", "#0e1a33", "#f8fafc", "#33415c"],
+  ["black", "Black", "#000000", "#ffffff", "#262626"],
+  ["rose", "Rose", "#fff1f3", "#4a1d2b", "#f9d6de"],
+  ["mint", "Mint", "#ecfdf5", "#064e3b", "#cdefe0"],
+  ["glass", "Glass", "rgba(14,26,51,0.72)", "#ffffff", "rgba(255,255,255,0.22)"],
+];
+
+async function showThemes() {
+  const { panelTheme = "auto" } = await chrome.storage.local.get("panelTheme");
+  $("themes").replaceChildren(...THEMES.map(([value, label, bg, fg, border]) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = value === panelTheme ? `✓ ${label}` : label;
+    b.className = value === panelTheme ? "on" : "";
+    b.style.cssText = `background:${bg};color:${fg};border:1px solid ${border}`;
+    b.addEventListener("click", async () => {
+      await chrome.storage.local.set({ panelTheme: value });
+      showThemes();
+    });
+    return b;
+  }));
+}
+
 // ---------- Style ----------
 
 async function showStyle() {
@@ -164,6 +193,7 @@ async function showChats() {
 }
 
 checkHealth();
+showThemes();
 showStyle();
 loadKeys();
 showChats();

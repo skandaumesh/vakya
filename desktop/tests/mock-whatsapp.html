@@ -133,7 +133,7 @@
           } };
         },
       },
-      storage: { local: {
+      storage: { onChanged: { addListener() {} }, local: {
         async get(keys) {
           const list = keys == null ? Object.keys(store) : [].concat(keys);
           return Object.fromEntries(list.filter((k) => k in store).map((k) => [k, store[k]]));
@@ -143,6 +143,8 @@
       } },
     };
     window.vakyaStore = store;
+    // #rose, #glass...: the panel background picked in settings.
+    for (const t of ["white", "navy", "black", "rose", "mint", "glass"]) if (opts.has(t)) store.panelTheme = t;
   </script>
   <script src="../extension/shared.js"></script>
   <script src="../extension/content.js"></script>

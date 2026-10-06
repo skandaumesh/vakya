@@ -14,12 +14,14 @@ import android.os.Looper
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.InputType
+import android.view.Gravity
 import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.EditText
+import android.widget.HorizontalScrollView
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
@@ -34,6 +36,7 @@ import com.replybot.data.ReplyApi
 import com.replybot.data.Store
 import com.replybot.importer.ChatExportParser
 import com.replybot.service.ChatReaderService
+import com.replybot.service.PanelTheme
 import org.json.JSONObject
 import java.util.concurrent.Executors
 import kotlin.math.roundToInt
@@ -197,6 +200,47 @@ class MainActivity : Activity() {
             }
         }
         col.addView(appsCard)
+
+        // How the reply panel looks: a swatch per background, drawn in its own colours.
+        val lookCard = glassCard().apply {
+            addView(cardHeading("Panel background", "LOOK"))
+            addView(text("How the reply panel looks in your chats. Auto follows your phone's dark mode.", 13f, muted = true))
+            val swatches = mutableListOf<Pair<String, TextView>>()
+            fun mark() = swatches.forEach { (value, view) ->
+                val t = PanelTheme.resolve(value, night = false)
+                val picked = value == store.panelTheme
+                view.background = GradientDrawable().apply {
+                    cornerRadius = px(14).toFloat()
+                    setColor(t.bg)
+                    setStroke(px(if (picked) 3 else 1), if (picked) c.primary else t.border)
+                }
+                view.text = if (picked) "✓ ${view.tag}" else view.tag as String
+            }
+            val row = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.HORIZONTAL }
+            PanelTheme.CHOICES.forEach { (value, label) ->
+                val swatch = TextView(this@MainActivity).apply {
+                    tag = label
+                    textSize = 13f
+                    typeface = Typeface.DEFAULT_BOLD
+                    setTextColor(PanelTheme.resolve(value, night = false).fg)
+                    gravity = Gravity.CENTER
+                    setPadding(px(16), px(18), px(16), px(18))
+                    setOnClickListener {
+                        store.panelTheme = value
+                        mark()
+                        toast("Panel background: $label")
+                    }
+                }
+                swatches += value to swatch
+                row.addView(swatch, LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = px(8) })
+            }
+            mark()
+            addView(HorizontalScrollView(this@MainActivity).apply {
+                isHorizontalScrollBarEnabled = false
+                addView(row)
+            }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = px(6) })
+        }
+        col.addView(lookCard)
 
         // 2. Server Card
         val card2 = glassCard().apply {

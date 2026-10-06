@@ -20,6 +20,7 @@ import android.widget.TextView
 import com.replybot.R
 import com.replybot.data.ComposeResult
 import com.replybot.data.STYLES
+import com.replybot.data.Store
 import com.replybot.data.SuggestResult
 import com.replybot.data.Suggestion
 import kotlin.math.roundToInt
@@ -52,15 +53,16 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     private val night get() = (ctx.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
         Configuration.UI_MODE_NIGHT_YES
 
-    // OneZeroLabs colours: white + navy, or navy + gold in dark mode.
-    private val bg get() = if (night) 0xFF0E1A33.toInt() else 0xFFFFFFFF.toInt()
-    private val fg get() = if (night) 0xFFF8FAFC.toInt() else 0xFF0E1A33.toInt()
-    private val muted get() = if (night) 0xFF94A3B8.toInt() else 0xFF6E809F.toInt()
-    private val chipBg get() = if (night) 0xFF1F2A44.toInt() else 0xFFF8FAFC.toInt()
-    private val border get() = if (night) 0xFF33415C.toInt() else 0xFFECEFF4.toInt()
-    private val accent get() = if (night) 0xFFF5C86B.toInt() else 0xFF0E1A33.toInt()
-    /** Text on an accent-filled pill: white on navy, navy on gold. */
-    private val onAccent get() = if (night) 0xFF0E1A33.toInt() else 0xFFFFFFFF.toInt()
+    // The background the user picked in Vakya (Auto: OneZeroLabs white by day, navy + gold at night).
+    private val theme get() = PanelTheme.resolve(Store.get(ctx).panelTheme, night)
+    private val bg get() = theme.bg
+    private val fg get() = theme.fg
+    private val muted get() = theme.muted
+    private val chipBg get() = theme.chipBg
+    private val border get() = theme.border
+    private val accent get() = theme.accent
+    /** Text on an accent-filled pill. */
+    private val onAccent get() = theme.onAccent
     private val serif by lazy { ctx.resources.getFont(R.font.instrument_serif) }
 
     private var bubble: View? = null

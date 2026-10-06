@@ -119,3 +119,34 @@ html.vakya-dark {
 .vakya-style-row[hidden] { display: none; }
 .vakya-foot { white-space: pre-line; }
 .vakya-back[hidden] { display: none; }
+
+/* Panel backgrounds picked in Vakya's settings (same names and colours as the phone app).
+   "auto" adds no class: white, or navy + gold in WhatsApp's dark mode. */
+html.vakya-theme-white {
+  --vk-bg: #ffffff; --vk-fg: #0e1a33; --vk-body: #33415c; --vk-muted: #6e809f; --vk-card: #f8fafc;
+  --vk-card-hover: #eef2f7; --vk-border: #eceff4; --vk-accent: #0e1a33; --vk-on-accent: #ffffff; --vk-label: #8a6420;
+}
+html.vakya-theme-navy {
+  --vk-bg: #0e1a33; --vk-fg: #f8fafc; --vk-body: #cbd5e1; --vk-muted: #94a3b8; --vk-card: #1f2a44;
+  --vk-card-hover: #273455; --vk-border: #33415c; --vk-accent: #f5c86b; --vk-on-accent: #0e1a33; --vk-label: #f5c86b;
+  --vk-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+html.vakya-theme-black {
+  --vk-bg: #000000; --vk-fg: #ffffff; --vk-body: #d4d4d4; --vk-muted: #9ca3af; --vk-card: #141414;
+  --vk-card-hover: #1f1f1f; --vk-border: #262626; --vk-accent: #ffffff; --vk-on-accent: #000000; --vk-label: #e5e5e5;
+  --vk-shadow: 0 18px 50px rgba(0, 0, 0, 0.6);
+}
+html.vakya-theme-rose {
+  --vk-bg: #fff1f3; --vk-fg: #4a1d2b; --vk-body: #6b3445; --vk-muted: #9f6b7a; --vk-card: #ffffff;
+  --vk-card-hover: #ffe4ea; --vk-border: #f9d6de; --vk-accent: #e11d48; --vk-on-accent: #ffffff; --vk-label: #be123c;
+}
+html.vakya-theme-mint {
+  --vk-bg: #ecfdf5; --vk-fg: #064e3b; --vk-body: #065f46; --vk-muted: #5f8f7e; --vk-card: #ffffff;
+  --vk-card-hover: #d1fae5; --vk-border: #cdefe0; --vk-accent: #059669; --vk-on-accent: #ffffff; --vk-label: #047857;
+}
+html.vakya-theme-glass {
+  --vk-bg: rgba(14, 26, 51, 0.72); --vk-fg: #ffffff; --vk-body: #e2e8f0; --vk-muted: #cbd5e1;
+  --vk-card: rgba(255, 255, 255, 0.12); --vk-card-hover: rgba(255, 255, 255, 0.2); --vk-border: rgba(255, 255, 255, 0.22);
+  --vk-accent: #f5c86b; --vk-on-accent: #0e1a33; --vk-label: #f5c86b; --vk-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+}
+html.vakya-theme-glass .vakya-panel { backdrop-filter: blur(18px) saturate(1.3); }
