@@ -5,9 +5,10 @@ Is it private?
    - Nobody at Vakya reads your chats. The server writes your replies and
      forgets the messages straight away: it never saves or logs them. The
      code is public, so anyone can check: github.com/skandaumesh/vakya
-   - Vakya only works inside WhatsApp, Telegram, Instagram and Messages (on a
-     laptop: only web.whatsapp.com). It can't see your bank, photos, passwords
-     or any other app.
+   - You choose the apps: Vakya works in WhatsApp until you tick more (Telegram,
+     Instagram, Messages) in the app. Android sends it nothing from any other
+     app, and it never reads your bank, photos or passwords. On a laptop it
+     only works on web.whatsapp.com.
    - It reads a chat only when you tap the bubble, and it never sends a
      message for you. Your style, saved replies and notes stay on your phone.
    - To write replies, the messages on screen go to an AI service: Groq, or

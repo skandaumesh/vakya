@@ -27,6 +27,7 @@ import android.widget.TextView
 import android.widget.Toast
 import com.replybot.R
 import com.replybot.bank.ReplyBank
+import com.replybot.data.CHAT_APPS
 import com.replybot.data.RELATIONSHIPS
 import com.replybot.data.SLURS
 import com.replybot.data.ReplyApi
@@ -161,8 +162,9 @@ class MainActivity : Activity() {
                 "• Nobody at Vakya reads your chats. The server writes your replies and forgets the messages " +
                     "straight away: it never saves or logs them. The code is public, so anyone can check: " +
                     "github.com/skandaumesh/vakya\n\n" +
-                    "• Vakya only works inside WhatsApp, Telegram, Instagram and Messages. It can't see any other " +
-                    "app: not your bank, photos or passwords.\n\n" +
+                    "• Vakya only works in the chat apps you tick below (WhatsApp, until you choose). Android " +
+                    "doesn't tell it about any other app, and it never reads anything else: not your bank, " +
+                    "photos or passwords.\n\n" +
                     "• It reads a chat only when you tap the bubble, and it never sends a message for you. " +
                     "(With \"Learn from messages I send\" on, it also keeps what you send, on this phone only.)\n\n" +
                     "• Your style, saved replies and notes stay on this phone. They aren't backed up anywhere, and " +
@@ -176,6 +178,25 @@ class MainActivity : Activity() {
             ))
         }
         col.addView(privacyCard)
+
+        // Which chat apps Vakya works in. Android is told to send it nothing from the rest.
+        val appsCard = glassCard().apply {
+            addView(cardHeading("Apps Vakya works in", "YOUR CHOICE"))
+            addView(text(
+                "Tick only the apps you want help in. Android won't let Vakya see the others at all. " +
+                    "Vakya can never be turned on outside these chat apps.",
+                13f, muted = true,
+            ))
+            val chosen = store.enabledApps.toMutableSet()
+            CHAT_APPS.forEach { (pkg, name) ->
+                addView(glassCheckBox(name, pkg in chosen) { checked ->
+                    if (checked) chosen += pkg else chosen -= pkg
+                    store.enabledApps = chosen.toSet()
+                    ChatReaderService.running?.applyAppChoice()
+                })
+            }
+        }
+        col.addView(appsCard)
 
         // 2. Server Card
         val card2 = glassCard().apply {

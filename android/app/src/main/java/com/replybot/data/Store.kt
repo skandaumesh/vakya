@@ -46,6 +46,14 @@ class Store private constructor(private val file: File, private val prefs: Share
 
     fun api() = ReplyApi(serverUrl, appKey, deviceId, ownGroqKey)
 
+    /**
+     * The chat apps Vakya works in, picked by the user (package names). Android is told to
+     * send Vakya nothing from the others. Default: WhatsApp only.
+     */
+    var enabledApps: Set<String>
+        get() = prefs.getStringSet("enabled_apps", null)?.toSet() ?: DEFAULT_APPS
+        set(v) = prefs.edit().putStringSet("enabled_apps", v).apply()
+
     var style: String
         get() = prefs.getString("style", "mine")?.takeIf { s -> STYLES.any { it.first == s } } ?: "mine"  // e.g. old "friendly"
         set(v) = prefs.edit().putString("style", v).apply()

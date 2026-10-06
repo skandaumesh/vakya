@@ -67,6 +67,18 @@ val NON_FRIEND = setOf("client", "professor", "colleague", "family", "partner")
 /** Relationship choice meaning "let Vakya guess". */
 const val AUTO = "auto"
 
+/** Chat apps Vakya can work in (package name to name), in menu order. Keep in sync with accessibility_config.xml. */
+val CHAT_APPS = listOf(
+    "com.whatsapp" to "WhatsApp",
+    "com.whatsapp.w4b" to "WhatsApp Business",
+    "org.telegram.messenger" to "Telegram",
+    "com.instagram.android" to "Instagram",
+    "com.google.android.apps.messaging" to "Messages",
+)
+
+/** Until the user picks: WhatsApp only. */
+val DEFAULT_APPS = setOf("com.whatsapp", "com.whatsapp.w4b")
+
 /** The style menu in the chat panel. */
 val STYLES = listOf(
     "mine" to "My style",

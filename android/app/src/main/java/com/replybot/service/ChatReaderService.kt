@@ -40,6 +40,11 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         /** Time for the chat list to settle after jumping to the newest message. */
         private const val SCROLL_SETTLE_MS = 450L
 
+        /** The running service, so the settings screen can apply a new choice of apps at once. */
+        @Volatile
+        var running: ChatReaderService? = null
+            private set
+
         private const val FOLLOW_UP_OFFLINE =
             "Your message is the last one, so there's nothing new to reply to. Follow-up ideas need AI."
     }
@@ -71,11 +76,26 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         store = Store.get(this)
         bank = ReplyBank.get(this)
         overlay = Overlay(this, this)
+        running = this
+        applyAppChoice()
+    }
+
+    /**
+     * Tell Android to send Vakya events only from the apps the user picked, so the others
+     * never reach it. Called on start and whenever the choice changes.
+     */
+    fun applyAppChoice() {
+        val info = serviceInfo ?: return
+        val chosen = SUPPORTED.keys.filter { it in store.enabledApps }
+        // An empty list means "every app" to Android: with nothing picked, listen to Vakya only.
+        info.packageNames = chosen.ifEmpty { listOf(packageName) }.toTypedArray()
+        serviceInfo = info
+        main.post(refresh)
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
-        if (pkg !in SUPPORTED) return
+        if (pkg !in SUPPORTED || pkg !in store.enabledApps) return
         if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) trackTyping(event, pkg)
         main.removeCallbacks(refresh)
         main.postDelayed(refresh, REFRESH_DELAY_MS)
@@ -84,6 +104,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     override fun onInterrupt() {}
 
     override fun onDestroy() {
+        if (running === this) running = null
         main.removeCallbacksAndMessages(null)
         if (::overlay.isInitialized) overlay.hideAll()
         io.shutdownNow()
@@ -95,7 +116,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     private fun chatInput(): Pair<String, AccessibilityNodeInfo>? {
         val root = rootInActiveWindow ?: return null
         val pkg = root.packageName?.toString() ?: return null
-        if (pkg !in SUPPORTED) return null
+        if (pkg !in SUPPORTED || pkg !in store.enabledApps) return null
         val input = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return null
         return if (ChatReader.isChatInput(input, pkg)) pkg to input else null
     }
