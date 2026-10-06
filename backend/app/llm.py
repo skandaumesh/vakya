@@ -177,6 +177,20 @@ def _not_a_letter(text: str) -> str:
     return out[:1].upper() + out[1:] if out is not text else text
 
 
+# "ask him if he's coming" in a chat with him means "are you coming?". Models sometimes
+# write about him instead ("is he coming?", "avanu bartana?", "can you ask him...").
+_ABOUT_CHAT_PERSON = re.compile(r"^\s*(?:pls\s+|please\s+)?(?:ask|tell|remind|inform)\s+(?:him|her|them)\b", re.IGNORECASE)
+_THIRD_PERSON = re.compile(
+    r"\b(?:ask (?:him|her)|tell (?:him|her)|(?:if|whether|is|will|does|did|has) (?:he|she)|avanu|avalu|avnu|avlu)\b",
+    re.IGNORECASE,
+)
+
+
+def talks_about_them(intent: str, texts: list[str]) -> bool:
+    """True when I asked to say something TO the person in this chat, but a version talks ABOUT them."""
+    return bool(_ABOUT_CHAT_PERSON.match(intent)) and any(_THIRD_PERSON.search(t) for t in texts)
+
+
 async def compose_message(req: ComposeRequest) -> ComposeResponse:
     """Write it for me: what I want to say, in rough words -> the message in each style."""
     user_content = render_compose_input(req)
@@ -190,6 +204,14 @@ async def compose_message(req: ComposeRequest) -> ComposeResponse:
         note = (
             f"\n\n<note>Your previous versions stated amounts I never mentioned ({', '.join(invented)}). "
             "Write them again without any price or amount that isn't in what I want to say, the chat or memory.</note>"
+        )
+        out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + note, ComposeOutput, max_tokens=1500, prefer=prefer)
+        elapsed_ms += retry_ms
+    elif talks_about_them(req.intent, [v.text for v in out.variants]):
+        note = (
+            "\n\n<note>\"him\"/\"her\" in what I want to say is the person this chat is with. Your previous versions "
+            "talked about them (\"is he coming?\", \"avanu bartana?\", \"ask him\"). Write every version TO them "
+            "directly: \"are you coming?\", \"naale bartiya?\".</note>"
         )
         out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + note, ComposeOutput, max_tokens=1500, prefer=prefer)
         elapsed_ms += retry_ms

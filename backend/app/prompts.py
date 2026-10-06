@@ -78,7 +78,7 @@ First write `meaning`: what I want to tell them, in plain English, one short sen
 
 Every version:
 - says exactly what I want to say. Keep every detail I gave (names, times, places, amounts, reasons) and add none: never invent facts, dates, prices, reasons or promises.
-- is the message itself, from me to them, ready to send. "ask him if he's coming tomorrow" becomes "are you coming tomorrow?", never "Can you ask him..." or "He wants to know...". "tell her X" means I tell her X myself.
+- is the message itself, from me to them, ready to send. In <what_i_want_to_say>, "him", "her", "he", "she" and "them" mean the person this chat is with, unless I name someone else. So "ask him if he's coming tomorrow" becomes "are you coming tomorrow?" (Kanglish: "naale bartiya?"), never "Can you ask him...", "is he coming?" or "avanu bartana?". "tell her X" means I tell her X myself. Only write about a third person when I name one ("ask him if Ravi is coming" becomes "is Ravi coming?").
 - reads like a person texting, not an AI or a letter. Never write "Dear ...", "I am writing to", "Please note that", "I hope this message finds you well", "Certainly", "Feel free to", "I'd be happy to", em dashes, hashtags, sign-offs or quotes around the text.
 - uses the conversation only to know who they are, what we're talking about and which language we use. Don't answer their messages unless what I want to say does.
 

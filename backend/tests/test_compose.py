@@ -104,3 +104,24 @@ def test_compose_input_without_a_chat():
 ])
 def test_professional_is_a_text_not_a_letter(raw, clean):
     assert llm._not_a_letter(raw) == clean
+
+
+@pytest.mark.parametrize("intent, texts, retry", [
+    ("ask him if he is coming tomorrow", ["avanu naale bartana?"], True),
+    ("ask him if he is coming tomorrow", ["Could you let me know if he will be coming?"], True),
+    ("ask him if he is coming tomorrow", ["naale bartiya maga?", "Are you coming tomorrow?"], False),
+    ("ask him if Ravi is coming", ["Is Ravi coming too?"], False),
+    ("tell Ravi that he is late", ["is he coming?"], False),  # not about the chat person
+])
+def test_talks_about_them_instead_of_to_them(intent, texts, retry):
+    assert llm.talks_about_them(intent, texts) is retry
+
+
+def test_compose_retries_when_it_talks_about_the_chat_person(fake_parse):
+    fake_parse["outputs"] = [
+        output(("mine", "avanu naale party ge bartana?")),
+        output(("mine", "naale party ge bartiya?")),
+    ]
+    r = client.post("/compose", json={"intent": "ask him if he is coming for the party tomorrow"})
+    assert fake_parse["n"] == 2
+    assert r.json()["variants"][0]["text"] == "naale party ge bartiya?"
