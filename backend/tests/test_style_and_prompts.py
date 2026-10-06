@@ -1,8 +1,10 @@
 import json
 from pathlib import Path
 
-from app.prompts import render_suggest_input
-from app.schemas import ChatMessage, StyleCard, SuggestRequest
+import pytest
+
+from app.prompts import detect_mix, render_suggest_input
+from app.schemas import ChatMessage, StyleCard, SuggestOutput, SuggestRequest, Suggestion
 from app.style_stats import compute_stats
 
 PERSONAS = json.loads((Path(__file__).parent.parent / "eval" / "personas.json").read_text(encoding="utf-8"))
@@ -63,3 +65,33 @@ def test_render_group_uses_names_and_skips_empty_draft():
     assert "(group)" in out
     assert "<draft>" not in out
     assert "relationship: unknown\n" in out
+
+
+@pytest.mark.parametrize("text, mix", [
+    ("naanu baralla kano, ammange husharilla", "kanglish"),
+    ("neenu bandre maatra naanu barteeni", "kanglish"),
+    ("avnu ninna bagge ketta maatadtidda", "kanglish"),
+    ("kodtini andidde alva, yaavaga kodtiya?", "kanglish"),
+    ("ಊಟ ಆಯ್ತಾ? ಯಾವಾಗ ಬರ್ತೀಯ?", "kannada_script"),
+    ("haan bhai, kal pakka", "hinglish"),
+    ("Can you send the martini recipe?", None),
+    ("Hi, any update on the website?", None),
+])
+def test_detects_kannada_in_any_spelling_or_script(text, mix):
+    assert detect_mix([text]) == mix
+
+
+def test_kannada_chats_are_sent_to_the_kannada_provider(monkeypatch):
+    from app import config, llm
+    seen = {}
+
+    async def _parse(system, user_content, output_format, max_tokens, prefer=None, **_kw):
+        seen["prefer"], seen["content"] = prefer, user_content
+        return SuggestOutput(intent="QUESTION", relationship_guess="friend", language="Kannada",
+                             suggestions=[Suggestion(label="Answer", text="ಆಯ್ತು")], memory_add=[], memory_resolve=[]), 1
+
+    monkeypatch.setattr(llm, "_parse", _parse)
+    monkeypatch.setattr(config, "KANGLISH_PROVIDER", "gemini")
+    import asyncio
+    asyncio.run(llm.suggest_replies(SuggestRequest(messages=[{"sender": "them", "text": "ಊಟ ಆಯ್ತಾ?"}])))
+    assert seen["prefer"] == "gemini" and "Kannada script" in seen["content"]

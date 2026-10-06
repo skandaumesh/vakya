@@ -6,12 +6,13 @@ from .errors import LLMError, LLMRefusal, MissingCredentials, ProviderTimeout, P
 from .prompts import (
     COMPOSE_SYSTEM,
     FRIEND_ONLY_WORDS,
+    KANNADA_MIXES,
     NON_FRIEND,
     SLURS,
     STYLE_SYSTEM,
     SUGGEST_SYSTEM,
+    chat_mix,
     compose_mix,
-    detect_mix,
     render_compose_input,
     render_style_input,
     render_suggest_input,
@@ -93,6 +94,33 @@ def strip_ai_phrases(text: str) -> str:
     return out or text
 
 
+# Indian scripts, by Unicode block. A reply in a script the chat doesn't use (Hindi letters
+# in a Kanglish chat, "आराम agi ba") is a model slip, not the user's language.
+_SCRIPTS = {
+    "Devanagari": (0x0900, 0x097F), "Bengali": (0x0980, 0x09FF), "Gurmukhi": (0x0A00, 0x0A7F),
+    "Gujarati": (0x0A80, 0x0AFF), "Tamil": (0x0B80, 0x0BFF), "Telugu": (0x0C00, 0x0C7F),
+    "Kannada": (0x0C80, 0x0CFF), "Malayalam": (0x0D00, 0x0D7F),
+}
+
+
+def _scripts(text: str) -> set[str]:
+    return {name for ch in text for name, (lo, hi) in _SCRIPTS.items() if lo <= ord(ch) <= hi}
+
+
+def foreign_scripts(options: list[str], chat: list[str]) -> set[str]:
+    """Scripts used in the options but nowhere in the chat (or what I typed)."""
+    used = set().union(*map(_scripts, chat)) if chat else set()
+    return set().union(*map(_scripts, options)) - used if options else set()
+
+
+def _wrong_script_note(scripts: set[str]) -> str:
+    return (
+        f"\n\n<note>Your previous options used {', '.join(sorted(scripts))} letters, which this chat doesn't use. "
+        "Write them again using only the scripts in the chat: Kannada or Hindi words in English letters "
+        "(or Kannada script only if they write in it).</note>"
+    )
+
+
 def _tidy_label(label: str) -> str:
     """'NeedTime' -> 'Need time'."""
     label = label.strip()
@@ -105,9 +133,9 @@ def _tidy_label(label: str) -> str:
 async def suggest_replies(req: SuggestRequest) -> SuggestResponse:
     media_notes = await describe_media(req.messages)
     user_content = render_suggest_input(req, media_notes)
-    # Kanglish is understood far better by Gemini than by Groq's models, so ask it first.
-    mix = detect_mix([m.text for m in req.messages if m.sender == "them"])
-    prefer = config.KANGLISH_PROVIDER if mix == "kanglish" else None
+    # Kannada (in English letters or Kannada script) is understood far better by Gemini
+    # than by Groq's models, so ask it first.
+    prefer = config.KANGLISH_PROVIDER if chat_mix(req) in KANNADA_MIXES else None
     out: SuggestOutput
     out, elapsed_ms = await _parse(SUGGEST_SYSTEM, user_content, SuggestOutput, max_tokens=2000, prefer=prefer)
 
@@ -121,6 +149,9 @@ async def suggest_replies(req: SuggestRequest) -> SuggestResponse:
             "Write the options again without any price or amount that isn't in the conversation or memory.</note>"
         )
         out, retry_ms = await _parse(SUGGEST_SYSTEM, user_content + note, SuggestOutput, max_tokens=2000, prefer=prefer)
+        elapsed_ms += retry_ms
+    elif wrong := foreign_scripts([s.text for s in out.suggestions], [m.text for m in req.messages] + [req.draft]):
+        out, retry_ms = await _parse(SUGGEST_SYSTEM, user_content + _wrong_script_note(wrong), SuggestOutput, max_tokens=2000, prefer=prefer)
         elapsed_ms += retry_ms
 
     # Friend-only address words never go to a client, professor, family member...,
@@ -200,7 +231,7 @@ async def compose_message(req: ComposeRequest) -> ComposeResponse:
     """Write it for me: what I typed in the box -> that message in each style, or, if I asked
     for something to send ("pickup line", "roast him"), 4 different ideas."""
     user_content = render_compose_input(req)
-    prefer = config.KANGLISH_PROVIDER if compose_mix(req) == "kanglish" else None
+    prefer = config.KANGLISH_PROVIDER if compose_mix(req) in KANNADA_MIXES else None
     out: ComposeOutput
     out, elapsed_ms = await _parse(COMPOSE_SYSTEM, user_content, ComposeOutput, max_tokens=1500, prefer=prefer)
 
@@ -220,6 +251,9 @@ async def compose_message(req: ComposeRequest) -> ComposeResponse:
             "directly: \"are you coming?\", \"naale bartiya?\".</note>"
         )
         out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + note, ComposeOutput, max_tokens=1500, prefer=prefer)
+        elapsed_ms += retry_ms
+    elif wrong := foreign_scripts(_texts(out), [m.text for m in req.messages] + [req.intent] + req.examples):
+        out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + _wrong_script_note(wrong), ComposeOutput, max_tokens=1500, prefer=prefer)
         elapsed_ms += retry_ms
 
     banned: set[str] = set()

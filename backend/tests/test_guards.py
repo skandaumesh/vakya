@@ -177,3 +177,11 @@ def test_assistant_phrases_are_cut_from_options():
     assert strip_ai_phrases("Feel free to call me anytime!") == "Feel free to call me anytime!"  # nothing left: keep
     assert strip_ai_phrases("sari maga, bartini") == "sari maga, bartini"
     assert strip_ai_phrases("Hi Priya, sorry for the delay—I'll share them soon") == "Hi Priya, sorry for the delay, I'll share them soon"
+
+
+def test_foreign_scripts_in_options_are_caught():
+    from app.llm import foreign_scripts
+    assert foreign_scripts(["sari macha, आराम agi ba"], ["swalpa late aagutte"]) == {"Devanagari"}
+    assert foreign_scripts(["ಆಯ್ತು, ಬರ್ತೀನಿ"], ["ಊಟ ಆಯ್ತಾ?"]) == set()  # they write Kannada script: fine
+    assert foreign_scripts(["ಆಯ್ತು"], ["oota aytha?"]) == {"Kannada"}  # they write in English letters
+    assert foreign_scripts(["sari, bartini 👍"], ["naale bartiya?"]) == set()

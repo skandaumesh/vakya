@@ -135,13 +135,33 @@ def strip_slurs(text: str) -> str:
 
 
 # Common words of Kannada and Hindi written in English letters. When their messages
-# use them, a short guide is added: weaker models otherwise drift to English or
-# invent words.
+# use them, a short guide is added and the chat goes to the provider that reads
+# Kannada best: weaker models otherwise misread it, drift to English or invent words.
 KANGLISH_WORDS = {
-    "maga", "macha", "guru", "illa", "beda", "gottilla", "aytu", "aaytu", "madtini", "madthini",
-    "bartini", "barthini", "barthiya", "bartiya", "swalpa", "yen", "yenu", "houdu", "nange", "ninge",
-    "sari", "ide", "idhe", "hogona", "banni", "beku", "naale", "ivattu", "yaake", "yelli", "hege",
-    "chennagide", "sakkath", "bidu", "oota", "aythu", "madbeku", "nodona", "gotthu", "idini", "idiya",
+    # address words and particles
+    "maga", "macha", "machi", "guru", "kano", "kane", "kanro", "alva", "alwa", "ante", "anta", "antha",
+    "andre", "aadre", "adre", "aadru", "matte", "mathe", "sumne", "summane", "bidu", "bidi", "beda", "bedi",
+    # pronouns and people
+    "naanu", "nanu", "neenu", "ninu", "nanna", "ninna", "nimma", "namma", "nam", "nim", "nange", "ninge",
+    "nimge", "namge", "avnu", "avanu", "avnige", "avalu", "avlu", "avalige", "avru", "avaru", "yaaru", "yaru",
+    "amma", "appa", "akka", "anna", "ajji", "thatha",
+    # yes / no / know / want
+    "houdu", "hudu", "illa", "alla", "gottu", "gothu", "gotthu", "gottilla", "gothilla", "beku", "bekitthu",
+    "sari", "sakkath", "bombaat", "chennagide", "chennagidhe", "chennagi", "paravagilla", "parvagilla",
+    # question words
+    "yen", "yenu", "enu", "yaake", "yake", "yelli", "elli", "hege", "hegidiya", "hegiddiya", "yavaga",
+    "yaavaga", "yavdu", "yaavdu", "eshtu", "yestu",
+    # time and things
+    "naale", "nale", "ivattu", "ivathu", "ninne", "eega", "ivaga", "amele", "aamele", "bega", "swalpa",
+    "tumba", "thumba", "innu", "mane", "kelsa", "kelasa", "oota", "duddu", "hudugi", "huduga",
+    # verbs and verb forms
+    "aytu", "aaytu", "aythu", "aytha", "aaytha", "aitu", "agilla", "aagilla", "agide", "aagide", "agutte",
+    "aagutte", "ide", "idhe", "idini", "iddini", "idiya", "iddiya", "idre", "idru", "bandre", "bandilla",
+    "bandide", "baa", "baro", "banni", "baralla", "barbeku", "hogona", "hogbeku", "hogli", "nodona",
+    "nodu", "nodi", "madu", "maadu", "madi", "maadi", "madbeda", "madbeku", "helu", "heli", "kelu", "keli",
+    "kodu", "kodi", "tago", "tagondu", "bartini", "barthini", "barteeni", "bartiya", "barthiya", "barteeya",
+    "madtini", "madthini", "maadtini", "kodtini", "heltini", "keltini", "kalstini", "nodtini", "hogtini",
+    "odidya", "odhidya", "sigutha", "siguthe", "gothaythu", "maadide", "maadidya", "madidya",
 }
 HINGLISH_WORDS = {
     "hai", "haan", "nahi", "nhi", "kya", "bhai", "yaar", "kar", "karunga", "kal", "acha", "accha",
@@ -168,7 +188,17 @@ LANGUAGE_GUIDES = {
         "swalpa (a little), tumba (very), sakkath (awesome), bega (quick), amele (later), ivaga (now), "
         "naale (tomorrow), ivattu (today), ninne (yesterday), mane (home), kelsa (work), oota (meal), "
         "duddu (money), paravagilla (no problem), chennagide (it's nice), innu (still/yet), "
-        "bandilla (hasn't come), bandide (has come), gothaythu (got it), nan/nanna (my), nin/ninna (your)."
+        "bandilla (hasn't come), bandide (has come), gothaythu (got it), nan/nanna (my), nin/ninna (your), "
+        "keltini (I'll ask: avnige keltini = I'll ask him; heltini is I'll TELL), kodtini (I'll give), "
+        "maadide/maadbitte (I did it), bande (I came), hode (I went), tinde (I ate), nodde (I saw), "
+        "malkobitte (I fell asleep), odidini (I studied), barlilla (didn't come), maadlilla (didn't do). "
+        "Use only Kannada words and forms you are sure of. If you're not sure how to say something in Kannada, "
+        "say that part in English: a natural mix beats broken or made-up Kannada."
+    ),
+    "kannada_script": (
+        "They write in Kannada script (ಕನ್ನಡ). Reply in Kannada script too, in simple everyday spoken Kannada "
+        "the way people text (ಊಟ ಆಯ್ತು, ನಾಳೆ ಬರ್ತೀನಿ, ಸರಿ, ಆಮೇಲೆ ಕಾಲ್ ಮಾಡ್ತೀನಿ), not formal written Kannada. "
+        "Tech and brand words can stay in English letters. Use only words you are sure of."
     ),
     "hinglish": (
         "They write Hinglish: Hindi in English letters mixed with English. Reply the same way: "
@@ -178,13 +208,47 @@ LANGUAGE_GUIDES = {
 }
 
 
+_KANNADA_SCRIPT = re.compile(r"[\u0C80-\u0CFF]")
+
+# Kannada verb endings that English words don't have: madtini/bartini (I will),
+# bartiya (will you), idini/idiya (I am / are you), maatadtidda (was doing),
+# madlilla (didn't), agutte/agide/agilla, bekitthu.
+_KANNADA_ENDING = re.compile(
+    r"(?:t|th)(?:ini|eeni|iya|eeya)$|idd?(?:ini|iya)$|tidd?(?:a|e|ru|re|lu)$|(?<=[a-z]{2})lilla$|"
+    r"a+g(?:utte|ide|ilva|illa|ithu)$|bekitthu$",
+)
+
+
+# English words that happen to end like Kannada verbs.
+_ENGLISH_LOOKALIKES = {"martini", "martinis", "bikini", "bikinis", "zucchini", "linguini", "tortellini", "panini", "lamborghini"}
+
+
 def detect_mix(texts: list[str]) -> str | None:
-    """'kanglish', 'hinglish' or None, from words in the given messages."""
+    """'kannada_script', 'kanglish', 'hinglish' or None, from the given messages."""
+    if any(_KANNADA_SCRIPT.search(t) for t in texts):
+        return "kannada_script"
     words = _words(texts)
-    kannada, hindi = len(words & KANGLISH_WORDS), len(words & HINGLISH_WORDS)
+    kannada = len(words & KANGLISH_WORDS) + sum(
+        1 for w in words - KANGLISH_WORDS - _ENGLISH_LOOKALIKES if len(w) >= 5 and _KANNADA_ENDING.search(w)
+    )
+    hindi = len(words & HINGLISH_WORDS)
     if max(kannada, hindi) == 0:
         return None
     return "kanglish" if kannada >= hindi else "hinglish"
+
+
+KANNADA_MIXES = {"kanglish", "kannada_script"}
+
+
+def chat_mix(req) -> str | None:
+    """The language of a chat: from their messages, else mine and my past messages here,
+    else my style card. (Works for suggest and compose requests.)"""
+    theirs = [m.text for m in req.messages if m.sender == "them"]
+    mine = [m.text for m in req.messages if m.sender == "me"] + list(req.examples)
+    mix = detect_mix(theirs) or detect_mix(mine)
+    if not mix and req.style_card and "kannada" in req.style_card.traits.language_mix.lower():
+        mix = "kanglish"
+    return mix
 
 
 # Grey placeholder text of chat apps' message boxes. Android can report it as the
@@ -252,9 +316,7 @@ def render_suggest_input(req: SuggestRequest, media_notes: dict[int, str] | None
     context.append(f"style_rule: {STYLE_RULES[req.style]}")
 
     # Their language, from their own messages (and mine in this chat, if they don't say much).
-    mix = detect_mix([m.text for m in req.messages if m.sender == "them"]) or detect_mix(
-        [m.text for m in req.messages if m.sender == "me"] + req.examples
-    )
+    mix = chat_mix(req)
     if mix:
         context.append(f"language_guide: {LANGUAGE_GUIDES[mix]}")
 
@@ -356,9 +418,7 @@ def render_compose_input(req: ComposeRequest) -> str:
 
 
 def compose_mix(req: ComposeRequest) -> str | None:
-    return detect_mix(
-        [m.text for m in req.messages] + req.examples + [req.intent]
-    ) or (detect_mix([req.style_card.traits.language_mix]) if req.style_card else None)
+    return chat_mix(req) or detect_mix([req.intent])
 
 
 def render_style_input(my_messages: list[str]) -> str:
