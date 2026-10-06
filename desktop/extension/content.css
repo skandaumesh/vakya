@@ -118,3 +118,4 @@ html.vakya-dark {
 .vakya-foot { margin-top: 9px; font-size: 11px; color: var(--vk-muted); }
 .vakya-style-row[hidden] { display: none; }
 .vakya-foot { white-space: pre-line; }
+.vakya-back[hidden] { display: none; }

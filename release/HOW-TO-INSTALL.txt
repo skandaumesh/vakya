@@ -1,6 +1,22 @@
 Vakya: reply suggestions in your own style, right inside WhatsApp
 (Android phone: steps 1-4. Laptop with WhatsApp Web: see the end.)
 
+Is it private?
+   - Nobody at Vakya reads your chats. The server writes your replies and
+     forgets the messages straight away: it never saves or logs them. The
+     code is public, so anyone can check: github.com/skandaumesh/vakya
+   - Vakya only works inside WhatsApp, Telegram, Instagram and Messages (on a
+     laptop: only web.whatsapp.com). It can't see your bank, photos, passwords
+     or any other app.
+   - It reads a chat only when you tap the bubble, and it never sends a
+     message for you. Your style, saved replies and notes stay on your phone.
+   - To write replies, the messages on screen go to an AI service: Groq, or
+     Google Gemini for Kannada-English chats and when Groq is busy. Gemini is
+     Google's free tier, so Google may use what it receives to improve its
+     products, and people at Google may review it. With your own free Groq key
+     (see "Good to know"), your chats never go to Google.
+   - Don't use Vakya on chats with OTPs, passwords or bank details.
+
 1. Install
    Google blocks apps from outside the Play Store that use Accessibility
    ("App blocked to protect your device"), because scam apps misuse it.
@@ -18,9 +34,14 @@ Vakya: reply suggestions in your own style, right inside WhatsApp
 2. Turn it on
    - Open Vakya → "Turn on in Accessibility settings" → read the note → Agree.
    - Find Vakya in the list (maybe under "Downloaded apps") and switch it ON.
-   - If the switch is grey or says "Restricted setting": go to
-     Settings → Apps → Vakya → ⋮ (top right) → "Allow restricted settings",
-     then switch it on again.
+   - Switch greyed out, or a "Restricted setting" message? Android does this
+     for every app installed from a file. Unlock it once:
+       1. Try to switch Vakya on, so the "Restricted setting" message appears.
+       2. Open Vakya → "Open Vakya's app info" (or Settings → Apps → Vakya).
+       3. Tap ⋮ (top right) → "Allow restricted settings", and confirm with
+          your PIN or fingerprint.
+       4. Back in Accessibility, switch Vakya on.
+     Samsung, Xiaomi, vivo, OnePlus and Pixel all have the same ⋮ menu.
 
 3. Use it
    - Open any WhatsApp chat and tap the message box.
@@ -44,12 +65,6 @@ Good to know
      offline replies are unlimited.
    - Want unlimited AI? Make a free key at console.groq.com/keys and paste it
      into Vakya → "Your own Groq key (optional)" → Save and test.
-   - Vakya reads the chat on screen only when you tap the bubble. Messages are
-     sent to the Vakya server and an AI service to write replies: Groq, or
-     Google Gemini for Kannada-English chats and when Groq is busy. The
-     server doesn't store them, but Gemini is Google's free tier, where Google
-     may use what it receives to improve its products. Your saved replies and
-     style stay on your phone (or in your browser on a laptop).
 
 On a laptop (WhatsApp Web, in Chrome, Edge or Brave)
    1. Right-click Vakya-Desktop-0.4.0.zip → Extract All. Keep the folder somewhere safe

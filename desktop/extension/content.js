@@ -150,8 +150,9 @@
   const NOTHING_TO_REPLY =
     "Nothing on screen to reply to. Tip: type what you want to say in the box, then press Alt+V to get it written in every style.";
 
-  /** Text in the box: write what I mean in every style. Otherwise: replies to their newest messages. */
-  async function suggest() {
+  /** Text in the box: write what I mean in every style. Otherwise (or with [forceReply]):
+   *  replies to their newest messages, finishing anything typed. */
+  async function suggest(forceReply = false) {
     const box = composeBox();
     if (!box || !panel) return;
     const title = chatTitle() || "Unknown chat";
@@ -171,7 +172,7 @@
       image: withImage === i ? toJpeg(m.img) : null,
     }));
 
-    if (draft) {
+    if (draft && !forceReply) {
       setMode("compose");
       const res = await ask("compose", {
         app: "whatsapp",
@@ -183,7 +184,7 @@
         examples: [],
         memory: chat.memory || [],
         intent: draft.slice(0, 1000),
-      }, "Writing it in every style…");
+      }, "Writing it in every style…", { 404: () => suggest(true) }); // older server: replies instead
       if (res) showCompose(res.data);
       return;
     }
@@ -212,7 +213,7 @@
       style_card: style === "mine" ? stored.styleCard || null : null,
       examples: [],
       memory: chat.memory || [],
-      draft: "",
+      draft: draft.slice(0, 2000),
     }, "Reading the chat…");
     if (!res) return;
     const r = res.data;
@@ -222,8 +223,9 @@
     showResult(r, followUp);
   }
 
-  /** One request through the background script; null (with the reason shown) if it failed or is stale. */
-  async function ask(type, body, loading) {
+  /** One request through the background script; null (with the reason shown) if it failed or is stale.
+   *  [onStatus] maps an HTTP status to a handler that runs instead of showing the error. */
+  async function ask(type, body, loading, onStatus = {}) {
     const mySeq = ++seq;
     showNote(loading);
     let res;
@@ -234,7 +236,8 @@
     }
     if (mySeq !== seq || !panel) return null;
     if (!res || !res.ok) {
-      showNote(res ? res.error : "Something went wrong.");
+      if (res && onStatus[res.status]) onStatus[res.status]();
+      else showNote(res ? res.error : "Something went wrong.");
       return null;
     }
     return res;
@@ -325,11 +328,16 @@
         style = value;
         chrome.storage.local.set({ style });
         markStyle();
-        suggest();
+        suggest(true); // the style menu only shows in reply mode
       });
       row.append(pill);
     }
-    styles.append(row);
+    // In write-it-for-me mode: back to replies, which finish what's typed.
+    const back = el("button", "vakya-pill vakya-back", "↩ Replies instead");
+    back.type = "button";
+    back.hidden = true;
+    back.addEventListener("click", () => suggest(true));
+    styles.append(row, back);
     panel.append(head, styles, el("div", "vakya-body"), el("div", "vakya-foot"));
     panel.addEventListener("mousedown", (e) => {
       if (e.target.closest("button")) keepFocus(e);
@@ -375,9 +383,10 @@
   /** Reply mode shows the style menu; write-it-for-me returns every style at once, so it hides it. */
   function setMode(mode) {
     if (!panel) return;
-    panel.querySelector(".vakya-label").textContent =
-      mode === "compose" ? "WRITE IT FOR ME · YOUR TEXT IN EVERY STYLE" : "THEME / TONE";
-    panel.querySelector(".vakya-style-row").hidden = mode === "compose";
+    const compose = mode === "compose";
+    panel.querySelector(".vakya-label").textContent = compose ? "WRITE IT FOR ME · YOUR TEXT IN EVERY STYLE" : "THEME / TONE";
+    panel.querySelector(".vakya-style-row").hidden = compose;
+    panel.querySelector(".vakya-back").hidden = !compose;
   }
 
   function cards(suggestions) {

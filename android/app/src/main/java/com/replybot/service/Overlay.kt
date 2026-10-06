@@ -37,6 +37,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         fun onStyleChange(style: String)
         fun onPanelClose()
         fun onAiRequested()
+        fun onRepliesInstead()
     }
 
     private companion object {
@@ -193,11 +194,14 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         }
     }
 
-    /** Write-it-for-me mode: every style comes back at once, so no style menu. */
+    /** Write-it-for-me mode: every style comes back at once, so instead of the style menu,
+     *  a way back to replies (finishing what's typed). */
     fun setComposeHeader() {
         if (panel == null) return
         modeLabel.text = "WRITE IT FOR ME · YOUR TEXT IN EVERY STYLE"
-        styleScroll.visibility = View.GONE
+        styleScroll.visibility = View.VISIBLE
+        styleRow.removeAllViews()
+        styleRow.addView(pill("↩ Replies instead", selected = false) { cb.onRepliesInstead() }, pillMargins())
     }
 
     /** [pinned]: the user's own past reply, shown while the AI works on more. */

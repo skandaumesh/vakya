@@ -7,12 +7,14 @@ import android.content.Intent
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.OpenableColumns
 import android.provider.Settings
 import android.text.InputType
+import android.view.View
 import android.view.ViewGroup.LayoutParams.MATCH_PARENT
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.widget.Button
@@ -43,6 +45,7 @@ class MainActivity : Activity() {
     private lateinit var store: Store
 
     private lateinit var serviceStatus: TextView
+    private lateinit var restrictedHelp: LinearLayout
     private lateinit var serverStatus: TextView
     private lateinit var styleSummary: TextView
     private lateinit var rebuildButton: Button
@@ -129,8 +132,50 @@ class MainActivity : Activity() {
             serviceStatus = text("", 14f)
             addView(serviceStatus)
             addView(glassButton("Turn on in Accessibility settings", primary = true) { showDisclosure() })
+            // Android 13+ greys out Accessibility for apps installed from an APK file
+            // ("Restricted setting") until the user allows it in the app's info page.
+            restrictedHelp = glassInset().apply {
+                addView(text("Switch greyed out, or it says \"Restricted setting\"?", 14f, bold = true))
+                addView(text(
+                    "Android blocks this for apps installed from a file until you allow it:\n" +
+                        "1. Tap \"Open Vakya's app info\" below.\n" +
+                        "2. Tap ⋮ (top right) → \"Allow restricted settings\" and confirm with your PIN or fingerprint.\n" +
+                        "3. Come back and tap \"Turn on in Accessibility settings\" again.\n\n" +
+                        "No \"Allow restricted settings\" in the ⋮ menu? Try switching Vakya on in Accessibility once " +
+                        "first (so the \"Restricted setting\" message appears), then look again.",
+                    13f, muted = true,
+                ))
+                addView(glassButton("Open Vakya's app info", primary = false) {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                })
+            }
+            addView(restrictedHelp)
         }
         col.addView(card1)
+
+        // Privacy, right where people decide to switch Vakya on. Every line must stay true:
+        // check the server's logging, the accessibility scope and the AI providers before editing.
+        val privacyCard = glassCard().apply {
+            addView(cardHeading("Your chats stay yours", "PRIVACY"))
+            addView(text(
+                "• Nobody at Vakya reads your chats. The server writes your replies and forgets the messages " +
+                    "straight away: it never saves or logs them. The code is public, so anyone can check: " +
+                    "github.com/skandaumesh/vakya\n\n" +
+                    "• Vakya only works inside WhatsApp, Telegram, Instagram and Messages. It can't see any other " +
+                    "app: not your bank, photos or passwords.\n\n" +
+                    "• It reads a chat only when you tap the bubble, and it never sends a message for you. " +
+                    "(With \"Learn from messages I send\" on, it also keeps what you send, on this phone only.)\n\n" +
+                    "• Your style, saved replies and notes stay on this phone. They aren't backed up anywhere, and " +
+                    "uninstalling Vakya deletes them.\n\n" +
+                    "• To write replies, the messages on screen go to an AI service: Groq, or Google Gemini for " +
+                    "Kannada-English chats and when Groq is busy. Gemini is Google's free tier, so Google may use " +
+                    "what it receives to improve its products, and people at Google may review it. Add your own " +
+                    "Groq key below and your chats never go to Google.\n\n" +
+                    "• Don't use Vakya on chats with OTPs, passwords or bank details.",
+                14f,
+            ))
+        }
+        col.addView(privacyCard)
 
         // 2. Server Card
         val card2 = glassCard().apply {
@@ -222,11 +267,13 @@ class MainActivity : Activity() {
     }
 
     private fun render() {
-        serviceStatus.text = if (serviceEnabled()) {
-            "✅ On. Open a chat in WhatsApp and tap the ✨ bubble above the message box."
+        val on = serviceEnabled()
+        serviceStatus.text = if (on) {
+            "✅ On. Open a chat in WhatsApp and tap the round Vakya bubble above the message box."
         } else {
             "Off. Vakya needs the Accessibility permission to read the chat on screen and type your reply."
         }
+        restrictedHelp.visibility = if (!on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) View.VISIBLE else View.GONE
         renderStyle()
         renderContacts()
     }

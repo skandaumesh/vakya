@@ -283,9 +283,19 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
                 if (seq != requestSeq || session?.key != s.key) return@post
                 result
                     .onSuccess { overlay.showCompose(it) }
-                    .onFailure { overlay.showError(ReplyApi.describe(it)) }
+                    .onFailure {
+                        // An older Vakya server has no write-it-for-me yet: give replies instead.
+                        if (it is ReplyApi.HttpError && it.code == 404) onRepliesInstead()
+                        else overlay.showError(ReplyApi.describe(it))
+                    }
             }
         }
+    }
+
+    /** From write-it-for-me back to replies; what's typed is kept and the replies finish it. */
+    override fun onRepliesInstead() {
+        updateHeader()
+        requestSuggestions()
     }
 
     /** The user's own past replies first, then built-in quick replies for the message's intent. */

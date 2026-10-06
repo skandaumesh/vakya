@@ -2,7 +2,7 @@
 <!-- A stand-in for WhatsApp Web, to check the Vakya panel without a WhatsApp account.
      Open in a browser (or headless: see desktop/README.md). Hash options, comma-separated:
      #dark = WhatsApp dark mode, #open = open the panel, #pick = also choose reply 1, #group = group chat,
-     #draft = text already typed in the box (write-it-for-me mode), #mylast = my message is the last one,
+     #draft = text already typed in the box (write-it-for-me mode), #oldserver = a server without /compose, #back = click "Replies instead", #mylast = my message is the last one,
      #new = a redesigned page with none of the ids/classes Vakya knows (no #main, footer, header,
             role=row, .message-in/.message-out, body.dark), plus a search box at the top. -->
 <html lang="en">
@@ -101,6 +101,7 @@
         async sendMessage(msg) {
           window.requests.push(msg);
           await new Promise((r) => setTimeout(r, 150));
+          if (msg.type === "compose" && opts.has("oldserver")) return { ok: false, status: 404, error: "Server error 404: Not Found" };
           if (msg.type === "compose") return { ok: true, data: {
             meaning: "Ask him if he's coming to the party tomorrow.", language: "Kanglish",
             variants: [
@@ -139,6 +140,7 @@
     const press = (key) => document.dispatchEvent(new KeyboardEvent("keydown", { key, altKey: true, bubbles: true }));
     if (opts.has("open") || opts.has("pick")) setTimeout(() => press("v"), 800);
     if (opts.has("pick")) setTimeout(() => press("1"), 1600);
+    if (opts.has("back")) setTimeout(() => document.querySelector(".vakya-back").click(), 1400);
     // For headless --dump-dom checks: what was sent, what ended up in the box, and the settings-page check.
     setTimeout(() => {
       let check = null;

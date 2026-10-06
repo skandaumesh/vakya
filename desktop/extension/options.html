@@ -32,6 +32,8 @@
     .chat b { display: block; }
     .chat ul { margin: 4px 0 0; padding-left: 18px; color: var(--body); }
     .link { color: #2563eb; }
+    .privacy { margin: 6px 0 0; padding-left: 18px; color: var(--body); }
+    .privacy li { margin-bottom: 7px; }
     pre { font: 11px/1.45 ui-monospace, Consolas, monospace; color: var(--body); background: var(--soft); border: 1px solid var(--line);
           border-radius: 12px; padding: 10px 12px; margin: 8px 0 0; white-space: pre-wrap; word-break: break-word; }
     kbd { font: 12px ui-monospace, monospace; background: var(--soft); border: 1px solid var(--line); border-radius: 6px; padding: 1px 6px; }
@@ -51,11 +53,26 @@
     <p>Open <a class="link" href="https://web.whatsapp.com" target="_blank">web.whatsapp.com</a>, open a chat, and click the round Vakya
        button above the message box, or press <kbd>Alt</kbd>+<kbd>V</kbd>. Pick a reply (or <kbd>Alt</kbd>+<kbd>1</kbd>/<kbd>2</kbd>/<kbd>3</kbd>);
        it's typed for you, and you press Enter to send.</p>
-    <p class="muted">Only when you open Vakya, the visible messages are sent to the Vakya server and an AI service: Groq, or Google Gemini for Kannada-English chats and when Groq is busy. The server doesn't store them. Gemini is Google's free tier, where Google may use what it receives to improve its products. Your style and notes stay in this browser.</p>
+    <p>Write it for me: type what you want to say in your own words first, then press <kbd>Alt</kbd>+<kbd>V</kbd>
+       to get it in every style (<kbd>Alt</kbd>+<kbd>1</kbd> to <kbd>4</kbd>).</p>
     <div id="health" class="status"></div>
     <button id="check" class="secondary">Check WhatsApp Web</button>
     <div id="check-status" class="status"></div>
     <pre id="check-details" hidden></pre>
+  </div>
+
+  <!-- Every line must stay true: check the server's logging, the extension's matches and the AI providers before editing. -->
+  <div class="card">
+    <div class="badge">PRIVACY</div>
+    <h2>Your chats stay yours</h2>
+    <ul class="privacy">
+      <li><b>Nobody at Vakya reads your chats.</b> The server writes your replies and forgets the messages straight away: it never saves or logs them. The code is public, so anyone can check: <a class="link" href="https://github.com/skandaumesh/vakya" target="_blank">github.com/skandaumesh/vakya</a>.</li>
+      <li>Vakya only works on web.whatsapp.com. It can't see your other tabs or websites.</li>
+      <li>It reads the open chat only when you click the Vakya button or press Alt+V, and it never sends a message for you.</li>
+      <li>Your style and notes stay in this browser on this computer.</li>
+      <li>To write replies, the messages on screen go to an AI service: Groq, or Google Gemini for Kannada-English chats and when Groq is busy. Gemini is Google's free tier, so Google may use what it receives to improve its products, and people at Google may review it. Add your own Groq key below and your chats never go to Google.</li>
+      <li>Don't use Vakya on chats with OTPs, passwords or bank details.</li>
+    </ul>
   </div>
 
   <div class="card">
