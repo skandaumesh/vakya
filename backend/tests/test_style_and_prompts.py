@@ -95,3 +95,41 @@ def test_kannada_chats_are_sent_to_the_kannada_provider(monkeypatch):
     import asyncio
     asyncio.run(llm.suggest_replies(SuggestRequest(messages=[{"sender": "them", "text": "ಊಟ ಆಯ್ತಾ?"}])))
     assert seen["prefer"] == "gemini" and "Kannada script" in seen["content"]
+
+
+KANGLISH_CARD = StyleCard.model_validate({
+    "traits": {"summary": "Casual, short, lowercase.", "language_mix": "Kannada-English (Kanglish, ~60% Kannada)",
+               "fillers": ["maga"], "signature_phrases": [], "emoji_habits": "rare",
+               "punctuation_and_casing": "lowercase", "avoid": []},
+    "stats": {"message_count": 50, "avg_words": 5, "median_words": 4, "emoji_rate": 0.1, "top_emojis": [],
+              "lowercase_start_rate": 0.9, "ends_with_period_rate": 0.0},
+})
+
+
+def test_english_chat_gets_english_even_with_a_kanglish_style_card():
+    req = SuggestRequest(style_card=KANGLISH_CARD, messages=[{"sender": "them", "text": "Hey, are we still on for tomorrow?"}])
+    out = render_suggest_input(req)
+    assert "reply_language: English" in out and "language_guide" not in out
+
+
+@pytest.mark.parametrize("picked, line, guide", [
+    ("kanglish", "reply_language (picked by me for this chat): Kanglish", "They write Kanglish"),
+    ("kannada", "reply_language (picked by me for this chat): Kannada in Kannada script", "Kannada script (ಕನ್ನಡ)"),
+    ("english", "reply_language (picked by me for this chat): English only", None),
+])
+def test_a_picked_language_wins(picked, line, guide):
+    req = SuggestRequest(language=picked, messages=[{"sender": "them", "text": "naale bartiya maga?"}])
+    out = render_suggest_input(req)
+    assert line in out
+    assert (guide in out) if guide else ("language_guide" not in out)
+
+
+@pytest.mark.parametrize("text, mix", [
+    ("Which IDE do you use?", None),
+    ("Thanks Anna, see you tomorrow", None),
+    ("Love the sari you wore", None),
+    ("beda bidu", "kanglish"),  # two softer words together
+    ("sari maga, naale bartini", "kanglish"),
+])
+def test_words_that_are_also_english_need_company(text, mix):
+    assert detect_mix([text]) == mix

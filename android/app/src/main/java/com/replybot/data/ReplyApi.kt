@@ -69,7 +69,9 @@ class ReplyApi(
             memory: List<String>,
             draft: String,
             similar: List<Pair<String, String>> = emptyList(),
+            language: String? = null,
         ): JSONObject = JSONObject()
+            .put("language", language ?: "auto")
             .put("app", app)
             .put("chat_title", title)
             .put("messages", JSONArray(messages.takeLast(40).map {
@@ -99,7 +101,9 @@ class ReplyApi(
             examples: List<String>,
             memory: List<String>,
             intent: String,
+            language: String? = null,
         ): JSONObject = JSONObject()
+            .put("language", language ?: "auto")
             .put("app", app)
             .put("chat_title", title)
             // Context and language only: no images needed to write my own message.

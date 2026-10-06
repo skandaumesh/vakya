@@ -139,7 +139,11 @@ def test_friend_words_kept_for_friends_and_when_i_use_them(monkeypatch):
                              memory_add=[], memory_resolve=[]), 1
 
     monkeypatch.setattr(llm, "_parse", _parse)
-    assert asyncio.run(llm.suggest_replies(req(relationship="friend"))).suggestions[0].text == "ok da 👍"
+    friend_kanglish = req(relationship="friend", messages=[ChatMessage(sender="them", text="naale bartiya?")])
+    assert asyncio.run(llm.suggest_replies(friend_kanglish)).suggestions[0].text == "ok da 👍"
+    # English chat: only if I use the word with this person myself.
+    assert asyncio.run(llm.suggest_replies(req(relationship="friend"))).suggestions[0].text == "ok 👍"
+    assert asyncio.run(llm.suggest_replies(req(relationship="friend", examples=["ok da"]))).suggestions[0].text == "ok da 👍"
     out = asyncio.run(llm.suggest_replies(req(relationship="client", examples=["ok da will send"])))
     assert out.suggestions[0].text == "ok da 👍"
 
@@ -185,3 +189,20 @@ def test_foreign_scripts_in_options_are_caught():
     assert foreign_scripts(["ಆಯ್ತು, ಬರ್ತೀನಿ"], ["ಊಟ ಆಯ್ತಾ?"]) == set()  # they write Kannada script: fine
     assert foreign_scripts(["ಆಯ್ತು"], ["oota aytha?"]) == {"Kannada"}  # they write in English letters
     assert foreign_scripts(["sari, bartini 👍"], ["naale bartiya?"]) == set()
+
+
+def test_english_chat_replies_lose_kannada_address_words(monkeypatch):
+    import asyncio
+    from app import llm
+    from app.schemas import SuggestOutput, SuggestRequest, Suggestion
+
+    async def _parse(*a, **k):
+        return SuggestOutput(intent="QUESTION", relationship_guess="friend", language="English",
+                             suggestions=[Suggestion(label="Yes", text="yeah still on, thanks maga")],
+                             memory_add=[], memory_resolve=[]), 1
+
+    monkeypatch.setattr(llm, "_parse", _parse)
+    english = SuggestRequest(messages=[{"sender": "them", "text": "Are we still on for tomorrow?"}])
+    assert asyncio.run(llm.suggest_replies(english)).suggestions[0].text == "yeah still on, thanks"
+    kanglish = SuggestRequest(messages=[{"sender": "them", "text": "naale bartiya maga?"}])
+    assert asyncio.run(llm.suggest_replies(kanglish)).suggestions[0].text == "yeah still on, thanks maga"

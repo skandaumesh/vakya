@@ -6,6 +6,7 @@ from .errors import LLMError, LLMRefusal, MissingCredentials, ProviderTimeout, P
 from .prompts import (
     COMPOSE_SYSTEM,
     FRIEND_ONLY_WORDS,
+    INDIAN_ADDRESS_WORDS,
     KANNADA_MIXES,
     NON_FRIEND,
     SLURS,
@@ -17,6 +18,7 @@ from .prompts import (
     render_style_input,
     render_suggest_input,
     strip_slurs,
+    wants_english,
 )
 from .providers import active_provider
 from .schemas import (
@@ -161,6 +163,10 @@ async def suggest_replies(req: SuggestRequest) -> SuggestResponse:
     if relationship in NON_FRIEND:
         mine_here = req.examples + [m.text for m in req.messages if m.sender == "me"] + [req.draft]
         banned = FRIEND_ONLY_WORDS - {w for t in mine_here for w in re.findall(r"[a-z]+", t.lower())}
+    if wants_english(req):
+        # ...unless I use the word with this person myself ("ok da").
+        mine = req.examples + [m.text for m in req.messages if m.sender == "me"] + [req.draft]
+        banned |= INDIAN_ADDRESS_WORDS - {w for t in mine for w in re.findall(r"[a-z]+", t.lower())}
 
     cleaned = [
         s.model_copy(update={"label": _tidy_label(s.label), "text": strip_slurs(strip_ai_phrases(strip_words(s.text, banned)))})
@@ -260,6 +266,10 @@ async def compose_message(req: ComposeRequest) -> ComposeResponse:
     if req.relationship in NON_FRIEND:
         mine_here = req.examples + [m.text for m in req.messages if m.sender == "me"] + [req.intent]
         banned = FRIEND_ONLY_WORDS - {w for t in mine_here for w in re.findall(r"[a-z]+", t.lower())}
+    if wants_english(req):
+        # ...unless I use the word with this person myself ("ok da").
+        mine = req.examples + [m.text for m in req.messages if m.sender == "me"] + [req.intent]
+        banned |= INDIAN_ADDRESS_WORDS - {w for t in mine for w in re.findall(r"[a-z]+", t.lower())}
     by_style: dict[str, str] = {}
     for v in out.variants:
         text = strip_slurs(strip_ai_phrases(strip_words(_unquote(v.text), banned)))

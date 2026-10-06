@@ -5,7 +5,7 @@
   "use strict";
   if (globalThis.vakyaRunning) return; // already injected into this tab (on install and by the manifest)
   globalThis.vakyaRunning = true;
-  const { STYLES, applyMemory, isPlaceholder } = globalThis.VakyaShared;
+  const { STYLES, LANGUAGES, applyMemory, isPlaceholder } = globalThis.VakyaShared;
   const LOGO = chrome.runtime.getURL("icons/icon128.png");
   const MAX_MESSAGES = 15;
   const MEDIA_MAX_SIDE = 384;
@@ -160,7 +160,10 @@
 
   /** Text in the box: write what I mean in every style. Otherwise (or with [forceReply]):
    *  replies to their newest messages, finishing anything typed. */
+  let lastForceReply = false;
+
   async function suggest(forceReply = false) {
+    lastForceReply = forceReply;
     const box = composeBox();
     if (!box || !panel) return;
     const title = chatTitle() || "Unknown chat";
@@ -188,6 +191,7 @@
         is_group: isGroup,
         messages: messages(-1),
         relationship: chat.relationship || chat.guessed || null,
+        language: chat.language || "auto",
         style_card: stored.styleCard || null,
         examples: [],
         memory: chat.memory || [],
@@ -222,6 +226,7 @@
       examples: [],
       memory: chat.memory || [],
       draft: draft.slice(0, 2000),
+      language: chat.language || "auto",
     }, "Reading the chat…");
     if (!res) return;
     const r = res.data;
@@ -353,12 +358,33 @@
     back.hidden = true;
     back.addEventListener("click", () => suggest(true));
     styles.append(row, back);
+
+    // Reply language for this chat (remembered per chat): Auto follows the chat.
+    const langLabel = el("div", "vakya-label vakya-lang-label", "LANGUAGE");
+    const langRow = el("div", "vakya-style-row vakya-lang-row");
+    for (const [value, label] of LANGUAGES) {
+      const pill = el("button", "vakya-pill vakya-lang", label);
+      pill.type = "button";
+      pill.dataset.lang = value;
+      pill.addEventListener("click", async () => {
+        const key = "chat:" + (chatTitle() || "Unknown chat");
+        const chat = (await chrome.storage.local.get(key))[key] || { memory: [] };
+        chat.language = value === "auto" ? undefined : value;
+        await chrome.storage.local.set({ [key]: chat });
+        markLanguage(value);
+        suggest(lastForceReply);
+      });
+      langRow.append(pill);
+    }
+    styles.append(langLabel, langRow);
     panel.append(head, styles, el("div", "vakya-body"), el("div", "vakya-foot"));
     panel.addEventListener("mousedown", (e) => {
       if (e.target.closest("button")) keepFocus(e);
     });
     document.body.append(panel);
     markStyle();
+    const chatKey = "chat:" + (openTitle || "Unknown chat");
+    chrome.storage.local.get(chatKey).then((s) => markLanguage((s[chatKey] || {}).language || "auto"));
     refresh();
     suggest();
   }
@@ -377,6 +403,10 @@
     panel.style.width = `${width}px`;
     panel.style.left = `${Math.round(Math.max(8, Math.min(r.right + 40 - width, window.innerWidth - width - 8)))}px`;
     panel.style.bottom = `${Math.round(window.innerHeight - r.top + 10)}px`;
+  }
+
+  function markLanguage(language) {
+    panel?.querySelectorAll(".vakya-lang").forEach((p) => p.classList.toggle("is-on", p.dataset.lang === language));
   }
 
   function markStyle() {
@@ -400,7 +430,7 @@
     if (!panel) return;
     const compose = mode === "compose";
     panel.querySelector(".vakya-label").textContent = compose ? "WRITE IT FOR ME · YOUR TEXT IN EVERY STYLE" : "THEME / TONE";
-    panel.querySelector(".vakya-style-row").hidden = compose;
+    panel.querySelector(".vakya-style-row:not(.vakya-lang-row)").hidden = compose;
     panel.querySelector(".vakya-back").hidden = !compose;
   }
 

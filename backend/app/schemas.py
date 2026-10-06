@@ -21,6 +21,9 @@ Relationship = Literal[
 
 ReplyStyle = Literal["mine", "professional", "short", "friendly", "genz"]
 
+# Reply language picked by the user for a chat; "auto" follows the chat.
+ReplyLanguage = Literal["auto", "english", "kanglish", "kannada", "hinglish"]
+
 MediaKind = Literal["photo", "sticker", "gif", "video", "voice", "document", "media"]
 
 
@@ -104,6 +107,7 @@ class SuggestRequest(BaseModel):
         max_length=8,
         description="From the phone's reply bank: how I replied to messages like this before.",
     )
+    language: ReplyLanguage = Field(default="auto", description="Picked by the user for this chat; auto follows the chat.")
 
 
 class Suggestion(BaseModel):
@@ -154,6 +158,7 @@ class ComposeRequest(BaseModel):
         max_length=1000,
         description="What I want to say, in my own rough words: 'ask him if he's coming tomorrow'.",
     )
+    language: ReplyLanguage = Field(default="auto", description="Picked by the user for this chat; auto follows the chat.")
 
 
 class ComposeVariant(BaseModel):

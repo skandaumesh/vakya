@@ -4,7 +4,7 @@ A browser extension for Chrome, Edge and Brave. On [web.whatsapp.com](https://we
 
 **Write it for me:** type what you want to say in your own words first ("ask him if he's coming tomorrow"), then press Alt+V. You get it written 4 ways: My style, Professional, Short and Gen Z (Alt+1 to 4). The one you pick replaces what you typed. You can also ask for something to send ("pickup line", "roast him", "bday wish for amma") and get 4 different ideas that fit the chat.
 
-It uses the same server, styles and daily limit as the phone app.
+It uses the same server, styles and daily limit as the phone app. Under the styles, pick the reply language for the chat (Auto · English · Kanglish · ಕನ್ನಡ · Hinglish); it's remembered per chat.
 
 ## Install (for you and friends)
 

@@ -19,6 +19,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import com.replybot.R
 import com.replybot.data.ComposeResult
+import com.replybot.data.LANGUAGES
 import com.replybot.data.STYLES
 import com.replybot.data.Store
 import com.replybot.data.SuggestResult
@@ -39,6 +40,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         fun onPanelClose()
         fun onAiRequested()
         fun onRepliesInstead()
+        fun onLanguageChange(language: String)
     }
 
     private companion object {
@@ -73,6 +75,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     private lateinit var modeLabel: TextView
     private lateinit var styleRow: LinearLayout
     private lateinit var styleScroll: HorizontalScrollView
+    private lateinit var languageRow: LinearLayout
     private lateinit var body: LinearLayout
     private lateinit var footer: TextView
     private var anchor = Rect()
@@ -193,6 +196,16 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         styleRow.removeAllViews()
         STYLES.forEach { (value, label) ->
             styleRow.addView(pill(label, selected = value == style) { cb.onStyleChange(value) }, pillMargins())
+        }
+    }
+
+    /** The language menu, with [language] (auto when null) highlighted. */
+    fun setLanguage(language: String?) {
+        if (panel == null) return
+        val picked = language ?: "auto"
+        languageRow.removeAllViews()
+        LANGUAGES.forEach { (value, label) ->
+            languageRow.addView(pill(label, selected = value == picked, small = true) { cb.onLanguageChange(value) }, pillMargins())
         }
     }
 
@@ -342,6 +355,20 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         }
         root.addView(styleScroll, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP_CONTENT))
 
+        // Reply language for this chat (remembered per chat): Auto follows the chat.
+        root.addView(TextView(ctx).apply {
+            text = "LANGUAGE:"
+            textSize = 10f
+            typeface = Typeface.DEFAULT_BOLD
+            setTextColor(muted)
+            setPadding(px(2), px(8), 0, px(2))
+        })
+        languageRow = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL }
+        root.addView(HorizontalScrollView(ctx).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(languageRow)
+        }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP_CONTENT))
+
         body = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         root.addView(body)
 
@@ -380,9 +407,9 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
 
     private fun pillMargins() = LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT).apply { marginEnd = px(6) }
 
-    private fun pill(label: String, selected: Boolean, onClick: () -> Unit) = TextView(ctx).apply {
+    private fun pill(label: String, selected: Boolean, small: Boolean = false, onClick: () -> Unit) = TextView(ctx).apply {
         text = label
-        textSize = 13f
+        textSize = if (small) 12f else 13f
         setTextColor(if (selected) onAccent else fg)
         background = rounded(if (selected) accent else chipBg, 999)
         setPadding(px(12), px(5), px(12), px(5))

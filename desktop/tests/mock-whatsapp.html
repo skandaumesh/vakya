@@ -2,7 +2,7 @@
 <!-- A stand-in for WhatsApp Web, to check the Vakya panel without a WhatsApp account.
      Open in a browser (or headless: see desktop/README.md). Hash options, comma-separated:
      #dark = WhatsApp dark mode, #open = open the panel, #pick = also choose reply 1, #group = group chat,
-     #draft = text already typed in the box (write-it-for-me mode), #oldserver = a server without /compose, #back = click "Replies instead", #ideas = the server answers with ideas, #mylast = my message is the last one,
+     #draft = text already typed in the box (write-it-for-me mode), #oldserver = a server without /compose, #back = click "Replies instead", #ideas = the server answers with ideas, #english = click the English language pill, #mylast = my message is the last one,
      #new = a redesigned page with none of the ids/classes Vakya knows (no #main, footer, header,
             role=row, .message-in/.message-out, body.dark), plus a search box at the top. -->
 <html lang="en">
@@ -153,6 +153,7 @@
     if (opts.has("open") || opts.has("pick")) setTimeout(() => press("v"), 800);
     if (opts.has("pick")) setTimeout(() => press("1"), 1600);
     if (opts.has("back")) setTimeout(() => document.querySelector(".vakya-back").click(), 1400);
+    if (opts.has("english")) setTimeout(() => document.querySelector('.vakya-lang[data-lang="english"]').click(), 1400);
     // For headless --dump-dom checks: what was sent, what ended up in the box, and the settings-page check.
     setTimeout(() => {
       let check = null;
@@ -171,6 +172,9 @@
         notes: [...document.querySelectorAll(".vakya-meaning, .vakya-note")].map((c) => c.textContent),
         modeLabel: document.querySelector(".vakya-label")?.textContent ?? null,
         type: window.requests.at(-1)?.type ?? null,
+        language: window.requests.at(-1)?.body?.language ?? null,
+        requests: window.requests.length,
+        langOn: document.querySelector(".vakya-lang.is-on")?.dataset.lang ?? null,
         darkPanel: document.documentElement.classList.contains("vakya-dark"),
         check,
       });

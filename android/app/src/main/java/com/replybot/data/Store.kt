@@ -123,6 +123,13 @@ class Store private constructor(private val file: File, private val prefs: Share
         save()
     }
 
+    /** [language] "auto" (or null) follows the chat. */
+    @Synchronized
+    fun setLanguage(key: String, language: String?) {
+        contact(key).language = language?.takeIf { it != "auto" }
+        save()
+    }
+
     @Synchronized
     fun removeMemory(key: String, item: String) {
         contact(key).memory.remove(item)
@@ -156,7 +163,8 @@ class Store private constructor(private val file: File, private val prefs: Share
                         .put("relationship", c.relationship)
                         .put("guessed_relationship", c.guessedRelationship)
                         .put("memory", JSONArray(c.memory))
-                        .put("examples", JSONArray(c.examples)))
+                        .put("examples", JSONArray(c.examples))
+                        .put("language", c.language))
                 }
             })
         val tmp = File(file.parentFile, file.name + ".tmp")
@@ -180,6 +188,7 @@ class Store private constructor(private val file: File, private val prefs: Share
                 guessedRelationship = c.optStringOrNull("guessed_relationship"),
                 memory = c.optJSONArray("memory")?.strings()?.toMutableList() ?: mutableListOf(),
                 examples = c.optJSONArray("examples")?.strings()?.toMutableList() ?: mutableListOf(),
+                language = c.optStringOrNull("language"),
             )
         }
     }

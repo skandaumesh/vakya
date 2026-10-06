@@ -45,7 +45,7 @@ Photos, stickers, GIFs and voice notes appear in brackets, described for you whe
 
 Emoji: only where it fits the moment. 😂 only for something actually funny. No emoji on urgent problems, bad news, apologies or serious work messages.
 
-Language: follow the language they use in this chat, whoever they are. If they mix Kannada, Hindi, Tamil, Telugu or another language with English in Latin script (Kanglish, Hinglish and so on), mix the same way, clients included: a client who writes "website kab tak ho jayega?" gets "Diwali se pehle ho jayega, pakka" rather than an English reply. If they write plain English, reply in English; add my usual mix only with friends. Use a native script only if the chat does.
+Language: if <context> has reply_language, write every option in it, whatever else this prompt, <my_style> or the chat suggest. Otherwise follow the language they use in this chat, whoever they are. If they write in English, reply in English only, even if <my_style> or my past messages elsewhere mix in Kannada or Hindi. If they mix Kannada, Hindi, Tamil, Telugu or another language with English in Latin script (Kanglish, Hinglish and so on), mix the same way, clients included: a client who writes "website kab tak ho jayega?" gets "Diwali se pehle ho jayega, pakka" rather than an English reply. Use a native script only if the chat does.
 
 Facts (the most common mistake, so check every option): never state my price, rate, amount, availability, timeline, delivery date or the status of work unless it is in the conversation or <memory>. Asked "what's your rate?" with nothing in memory: not "My rate is $80/hour" but "depends on the scope, can you share the details?". Asked "when will it be done?": use their own deadline ("before Diwali, pakka") or ask, never a new date like "25th Oct". You may agree to what they proposed, and a Delay option may suggest another time as a question ("can we do 5pm instead?"). Never claim something is done, sent or fixed unless the conversation or <memory> says so. Don't pick for me between choices they offered (a package, a slot, a plan) unless I already did; ask or keep it open.
 
@@ -92,7 +92,7 @@ Styles:
 - short: as few words as possible (1-8) while keeping the whole meaning.
 - genz: Gen Z texting. Lowercase, short, at most one or two slang words and only where they fit (fr, ngl, lowkey, no cap, bet, say less, bruh), mixed with the chat's language the way Indian Gen Z do ("no cap macha", "fr da"). 💀 and 😭 only for something funny or dramatic, never on a plain question, request or bad news. To a professor, client or family elder: just relaxed and lowercase, no slang. Never cringe.
 
-Language: write mine, short and genz in the language we use in this chat (see <conversation>, my past messages and language_guide), even when <what_i_want_to_say> is in English. If we text in Kanglish (Kannada in English letters mixed with English), write Kanglish; the same for Hinglish. Write professional in clear English, unless they write to me in another language. Ideas follow the chat's language like mine: if we write to each other in English, every idea is in English, with no Hindi or Kannada words. With no conversation, use the language of <what_i_want_to_say>. Use a native script only if the chat does.
+Language: if <context> has reply_language, write every version and idea in it, whatever else this prompt says. Otherwise write mine, short and genz in the language we use in this chat (see <conversation>, my past messages and language_guide), even when <what_i_want_to_say> is in English. If we text in Kanglish (Kannada in English letters mixed with English), write Kanglish; the same for Hinglish. Write professional in clear English, unless they write to me in another language. Ideas follow the chat's language like mine: if we write to each other in English, every idea is in English, with no Hindi or Kannada words. With no conversation, use the language of <what_i_want_to_say>. Use a native script only if the chat does.
 
 Never write slurs or hateful words about anyone's race, religion, caste, gender or disability.
 
@@ -137,6 +137,15 @@ def strip_slurs(text: str) -> str:
 # Common words of Kannada and Hindi written in English letters. When their messages
 # use them, a short guide is added and the chat goes to the provider that reads
 # Kannada best: weaker models otherwise misread it, drift to English or invent words.
+# Words that are also English words or names ("ide", "Anna", "sari", "Kodi"): they only
+# count as Kannada together with at least one clearer Kannada word or verb form.
+WEAK_KANGLISH_WORDS = {
+    "anna", "amma", "appa", "akka", "ajji", "thatha", "ide", "nam", "nim", "baa", "kodi", "heli", "alla",
+    "sari", "tago", "nodi", "madi", "nodu", "madu", "kelu", "helu", "kodu", "keli", "ante", "anta", "antha",
+    "andre", "adre", "matte", "mathe", "guru", "mane", "bega", "innu", "eega", "yen", "enu", "elli", "beda",
+    "bidi", "bidu", "idre", "idru", "tumba", "illa", "beku", "oota", "duddu", "nale", "ninne", "kano", "kane",
+}
+
 KANGLISH_WORDS = {
     # address words and particles
     "maga", "macha", "machi", "guru", "kano", "kane", "kanro", "alva", "alwa", "ante", "anta", "antha",
@@ -228,9 +237,11 @@ def detect_mix(texts: list[str]) -> str | None:
     if any(_KANNADA_SCRIPT.search(t) for t in texts):
         return "kannada_script"
     words = _words(texts)
-    kannada = len(words & KANGLISH_WORDS) + sum(
+    strong = len(words & (KANGLISH_WORDS - WEAK_KANGLISH_WORDS)) + sum(
         1 for w in words - KANGLISH_WORDS - _ENGLISH_LOOKALIKES if len(w) >= 5 and _KANNADA_ENDING.search(w)
     )
+    weak = len(words & WEAK_KANGLISH_WORDS)
+    kannada = strong + weak if strong or weak >= 2 else 0
     hindi = len(words & HINGLISH_WORDS)
     if max(kannada, hindi) == 0:
         return None
@@ -240,15 +251,55 @@ def detect_mix(texts: list[str]) -> str | None:
 KANNADA_MIXES = {"kanglish", "kannada_script"}
 
 
+# A picked reply language, as the language guide to add.
+PICKED_MIX = {"kanglish": "kanglish", "kannada": "kannada_script", "hinglish": "hinglish"}
+
+LANGUAGE_CHOICES = {
+    "english": "English only. No Kannada or Hindi words, even if my style card or past messages use them.",
+    "kanglish": "Kanglish: Kannada written in English letters, mixed with English, even if they write in English.",
+    "kannada": "Kannada in Kannada script (ಕನ್ನಡ): simple everyday spoken Kannada.",
+    "hinglish": "Hinglish: Hindi written in English letters, mixed with English.",
+}
+
+
 def chat_mix(req) -> str | None:
-    """The language of a chat: from their messages, else mine and my past messages here,
-    else my style card. (Works for suggest and compose requests.)"""
+    """The language of a chat: the one I picked, else what they write, else what I write in
+    this chat. Never my style card: that's how I text in general, and would push Kannada into
+    English chats. (Works for suggest and compose requests.)"""
+    if req.language != "auto":
+        return PICKED_MIX.get(req.language)
     theirs = [m.text for m in req.messages if m.sender == "them"]
     mine = [m.text for m in req.messages if m.sender == "me"] + list(req.examples)
-    mix = detect_mix(theirs) or detect_mix(mine)
-    if not mix and req.style_card and "kannada" in req.style_card.traits.language_mix.lower():
-        mix = "kanglish"
-    return mix
+    return detect_mix(theirs) or detect_mix(mine)
+
+
+# Kannada / Hindi address words that don't belong in an English reply ("thanks maga").
+INDIAN_ADDRESS_WORDS = {"maga", "macha", "machi", "machan", "guru", "da", "yaar", "bhai", "kano", "kane", "lo", "le"}
+
+
+def wants_english(req) -> bool:
+    """English replies: picked by me, or (on auto) they write English and nobody here mixes."""
+    if req.language != "auto":
+        return req.language == "english"
+    theirs = " ".join(m.text for m in req.messages if m.sender == "them")
+    return chat_mix(req) is None and bool(re.search(r"[A-Za-z]{2,}", theirs))
+
+
+def language_lines(req) -> list[str]:
+    """<context> lines about which language to write in."""
+    if req.language != "auto":
+        lines = [f"reply_language (picked by me for this chat): {LANGUAGE_CHOICES[req.language]}"]
+        if req.language in PICKED_MIX:
+            lines.append(f"language_guide: {LANGUAGE_GUIDES[PICKED_MIX[req.language]]}")
+        return lines
+    mix = chat_mix(req)
+    if mix:
+        return [f"language_guide: {LANGUAGE_GUIDES[mix]}"]
+    theirs = " ".join(m.text for m in req.messages if m.sender == "them")
+    if re.search(r"[A-Za-z]{2,}", theirs):
+        return ["reply_language: English. They write in English, so reply in English only: "
+                "no Kannada or Hindi words, whatever my style card says."]
+    return []
 
 
 # Grey placeholder text of chat apps' message boxes. Android can report it as the
@@ -316,9 +367,7 @@ def render_suggest_input(req: SuggestRequest, media_notes: dict[int, str] | None
     context.append(f"style_rule: {STYLE_RULES[req.style]}")
 
     # Their language, from their own messages (and mine in this chat, if they don't say much).
-    mix = chat_mix(req)
-    if mix:
-        context.append(f"language_guide: {LANGUAGE_GUIDES[mix]}")
+    context += language_lines(req)
 
     banned: set[str] = set()
     if req.relationship in NON_FRIEND:
@@ -384,11 +433,12 @@ def render_compose_input(req: ComposeRequest) -> str:
         f"chat: {req.chat_title or 'unknown'}{' (group)' if req.is_group else ''}",
         f"relationship: {req.relationship or 'unknown (guess it from the chat)'}",
     ]
-    # The language we text in here, from everyone's messages: the instruction itself is
-    # often plain English even in a Kanglish chat.
-    mix = compose_mix(req)
-    if mix:
-        context.append(f"language_guide: {LANGUAGE_GUIDES[mix]}")
+    # The language we text in here (the typed text is often plain English even in a
+    # Kanglish chat), or the one I picked for this chat.
+    lines = language_lines(req)
+    if not lines and (mix := detect_mix([req.intent])):
+        lines = [f"language_guide: {LANGUAGE_GUIDES[mix]}"]
+    context += lines
     banned: set[str] = set()
     if req.relationship in NON_FRIEND:
         banned = FRIEND_ONLY_WORDS - _words(req.examples + [m.text for m in req.messages if m.sender == "me"])

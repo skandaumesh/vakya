@@ -61,6 +61,8 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     private var requestSeq = 0
     private var lastTyped = ""
     private var lastInserted: String? = null
+    /** The panel shows write-it-for-me results (else replies). */
+    private var composing = false
 
     private val refresh = Runnable { refreshOverlay() }
 
@@ -161,6 +163,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
             val s = Session(pkg, Store.key(pkg, title), title, messages, draft)
             session = s
             overlay.showPanel(inputRect, screen)
+            overlay.setLanguage(store.contact(s.key).language)
             when {
                 // Text in the box: write what the user means, in every style.
                 draft.isNotEmpty() -> requestCompose()
@@ -202,6 +205,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         val s = session ?: return
         val contact = store.contact(s.key)
         val seq = ++requestSeq
+        composing = false
 
         // Their message to answer; null when my message is the last one (follow-up mode:
         // their older messages were already answered, so never match or reply to those).
@@ -244,6 +248,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
             examples = contact.examples.toList(),
             memory = contact.memory.toList(),
             draft = s.draft,
+            language = contact.language,
             // How I answered similar messages before: teaches the AI my exact words and
             // Kannada spellings. A looser match than for direct suggestions, since these
             // are only examples.
@@ -281,6 +286,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         val s = session ?: return
         val contact = store.contact(s.key)
         val seq = ++requestSeq
+        composing = true
         overlay.setComposeHeader()
         if (!store.useAi) {
             overlay.showError("Writing it for you needs AI. Turn on \"Use AI\" in Vakya.")
@@ -296,6 +302,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
             examples = contact.examples.toList(),
             memory = contact.memory.toList(),
             intent = s.draft,
+            language = contact.language,
         )
         val api = store.api()
         io.execute {
@@ -313,6 +320,14 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         }
     }
 
+    /** A language picked in the panel: remembered for this chat, and the panel redone in it. */
+    override fun onLanguageChange(language: String) {
+        val s = session ?: return
+        store.setLanguage(s.key, language)
+        overlay.setLanguage(store.contact(s.key).language)
+        if (composing) requestCompose() else requestSuggestions()
+    }
+
     /** From write-it-for-me back to replies; what's typed is kept and the replies finish it. */
     override fun onRepliesInstead() {
         updateHeader()
@@ -324,7 +339,12 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         if (query == null) return own
         val relationship = contact.relationship ?: contact.guessedRelationship
         val formal = relationship in NON_FRIEND || store.style == "professional"
-        val register = QuickReplies.registerFor(query, contact.examples.takeLast(10), formal)
+        // A language picked for this chat wins over guessing from the words.
+        val register = when (contact.language) {
+            "english", "hinglish" -> if (formal) QuickReplies.Register.POLITE else QuickReplies.Register.ENGLISH
+            "kanglish", "kannada" -> QuickReplies.Register.KANGLISH
+            else -> QuickReplies.registerFor(query, contact.examples.takeLast(10), formal)
+        }
         return (own.take(2) + QuickReplies.suggest(query, register)).distinctBy { it.text.trim().lowercase() }
     }
 

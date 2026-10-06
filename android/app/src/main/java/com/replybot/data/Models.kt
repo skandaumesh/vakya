@@ -48,6 +48,8 @@ class ContactRecord(
     val memory: MutableList<String> = mutableListOf(),
     /** The user's own recent messages in this chat, used as style examples. */
     val examples: MutableList<String> = mutableListOf(),
+    /** Reply language picked for this chat (see [LANGUAGES]); null means auto. */
+    var language: String? = null,
 )
 
 val RELATIONSHIPS = listOf("friend", "client", "professor", "partner", "family", "colleague")
@@ -78,6 +80,15 @@ val CHAT_APPS = listOf(
 
 /** Until the user picks: WhatsApp only. */
 val DEFAULT_APPS = setOf("com.whatsapp", "com.whatsapp.w4b")
+
+/** The language menu in the chat panel, remembered per chat. Auto follows the chat. */
+val LANGUAGES = listOf(
+    "auto" to "Auto",
+    "english" to "English",
+    "kanglish" to "Kanglish",
+    "kannada" to "ಕನ್ನಡ",
+    "hinglish" to "Hinglish",
+)
 
 /** The style menu in the chat panel. */
 val STYLES = listOf(

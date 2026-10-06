@@ -49,6 +49,8 @@ Is it private?
    - Tap the round Vakya bubble above it → pick a reply → it's typed for you.
      You still press Send yourself.
    - Choose a style at the top: My style · Professional · Short · Gen Z.
+   - Choose the language under it: Auto · English · Kanglish · ಕನ್ನಡ · Hinglish.
+     Vakya remembers it for that chat. Auto replies in the language they use.
    - Write it for me: type what you want to say in your own words
      ("ask him if he's coming tomorrow"), then tap the bubble. You get it
      written 4 ways: My style, Professional, Short and Gen Z. Tap one to

@@ -1,6 +1,15 @@
 // Logic shared by the WhatsApp Web script, the settings page and the tests.
 // The export parser is a port of backend/app/chat_export.py (keep them in sync).
 (function (root) {
+  // Reply language, remembered per chat. Auto follows the chat (same as the phone app).
+  const LANGUAGES = [
+    ["auto", "Auto"],
+    ["english", "English"],
+    ["kanglish", "Kanglish"],
+    ["kannada", "ಕನ್ನಡ"],
+    ["hinglish", "Hinglish"],
+  ];
+
   const STYLES = [
     ["mine", "My style"],
     ["professional", "Professional"],
@@ -80,7 +89,7 @@
     return ["message", "type a message", "write a message", "send a message", "text message"].includes(t);
   }
 
-  const api = { STYLES, parseExport, senders, guessMe, contactFromFilename, applyMemory, isPlaceholder };
+  const api = { STYLES, LANGUAGES, parseExport, senders, guessMe, contactFromFilename, applyMemory, isPlaceholder };
   root.VakyaShared = api;
   if (typeof module !== "undefined" && module.exports) module.exports = api;
 })(typeof globalThis !== "undefined" ? globalThis : this);
