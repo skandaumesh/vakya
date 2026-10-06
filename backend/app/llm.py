@@ -20,6 +20,7 @@ from .prompts import (
 from .providers import active_provider
 from .schemas import (
     COMPOSE_STYLES,
+    ComposeIdea,
     ComposeOutput,
     ComposeRequest,
     ComposeResponse,
@@ -191,15 +192,20 @@ def talks_about_them(intent: str, texts: list[str]) -> bool:
     return bool(_ABOUT_CHAT_PERSON.match(intent)) and any(_THIRD_PERSON.search(t) for t in texts)
 
 
+def _texts(out: ComposeOutput) -> list[str]:
+    return [v.text for v in out.variants] + [i.text for i in out.ideas]
+
+
 async def compose_message(req: ComposeRequest) -> ComposeResponse:
-    """Write it for me: what I want to say, in rough words -> the message in each style."""
+    """Write it for me: what I typed in the box -> that message in each style, or, if I asked
+    for something to send ("pickup line", "roast him"), 4 different ideas."""
     user_content = render_compose_input(req)
     prefer = config.KANGLISH_PROVIDER if compose_mix(req) == "kanglish" else None
     out: ComposeOutput
     out, elapsed_ms = await _parse(COMPOSE_SYSTEM, user_content, ComposeOutput, max_tokens=1500, prefer=prefer)
 
     source = " ".join([*(m.text for m in req.messages), *req.memory, req.intent])
-    invented = invented_amounts([v.text for v in out.variants], source)
+    invented = invented_amounts(_texts(out), source)
     if invented:
         note = (
             f"\n\n<note>Your previous versions stated amounts I never mentioned ({', '.join(invented)}). "
@@ -207,7 +213,7 @@ async def compose_message(req: ComposeRequest) -> ComposeResponse:
         )
         out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + note, ComposeOutput, max_tokens=1500, prefer=prefer)
         elapsed_ms += retry_ms
-    elif talks_about_them(req.intent, [v.text for v in out.variants]):
+    elif out.kind == "message" and talks_about_them(req.intent, [v.text for v in out.variants]):
         note = (
             "\n\n<note>\"him\"/\"her\" in what I want to say is the person this chat is with. Your previous versions "
             "talked about them (\"is he coming?\", \"avanu bartana?\", \"ask him\"). Write every version TO them "
@@ -228,9 +234,25 @@ async def compose_message(req: ComposeRequest) -> ComposeResponse:
         if text and v.style not in by_style:
             by_style[v.style] = text
     variants = [ComposeVariant(style=s, text=by_style[s]) for s in COMPOSE_STYLES if s in by_style]
-    if not variants:
+
+    ideas: list[ComposeIdea] = []
+    for i in out.ideas:
+        text = strip_slurs(strip_ai_phrases(strip_words(_unquote(i.text), banned)))
+        if text and text.lower() not in {x.text.lower() for x in ideas}:
+            ideas.append(ComposeIdea(label=_tidy_label(i.label) or "Idea", text=text))
+    ideas = ideas[:4]
+
+    # Trust what came back over the label the model gave it.
+    kind = "ideas" if ideas and (out.kind == "ideas" or not variants) else "message"
+    if kind == "ideas":
+        variants = []
+    else:
+        ideas = []
+    if not variants and not ideas:
         raise LLMError("model returned no message")
-    return ComposeResponse(meaning=out.meaning, language=out.language, variants=variants, latency_ms=elapsed_ms)
+    return ComposeResponse(
+        kind=kind, meaning=out.meaning, language=out.language, variants=variants, ideas=ideas, latency_ms=elapsed_ms,
+    )
 
 
 async def build_style_card(my_messages: list[str]) -> StyleCard:

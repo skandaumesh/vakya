@@ -221,12 +221,13 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         )
         setBody(
             understood + (pinned + r.suggestions).take(MAX_CARDS).map(::card),
-            footerText = "${r.intent.lowercase().replace('_', ' ')}$language\nTip: type an idea in the box first, then tap Vakya to get it written in every style.",
+            footerText = "${r.intent.lowercase().replace('_', ' ')}$language\nTip: type an idea in the box (or ask: \"pickup line\", \"roast him\"), then tap Vakya.",
         )
     }
 
     fun showCompose(r: ComposeResult) {
-        val understood = r.meaning.takeIf { it.isNotBlank() }?.let { listOf(note("✍️ $it")) }.orEmpty()
+        if (r.ideas) modeLabel.text = "IDEAS FOR YOU · TAP ONE TO USE IT"
+        val understood = r.meaning.takeIf { it.isNotBlank() }?.let { listOf(note((if (r.ideas) "💡 " else "✍️ ") + it)) }.orEmpty()
         val language = r.language.takeIf { it.isNotBlank() }?.let { "$it · " }.orEmpty()
         setBody(understood + r.variants.take(MAX_CARDS).map(::card), footerText = "${language}tap one to replace your text")
     }

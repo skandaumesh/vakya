@@ -30,8 +30,11 @@ data class SuggestResult(
  * written out once per style. Each variant's label is the style's name.
  */
 data class ComposeResult(
-    /** What Vakya understood the user wants to say, in plain English. */
+    /** What Vakya understood the user wants to say (or asked for), in plain English. */
     val meaning: String,
+    /** True when the user asked for something to send ("pickup line", "roast him"):
+     *  then [variants] are 4 different ideas, each labelled with its flavour. */
+    val ideas: Boolean,
     val language: String,
     val variants: List<Suggestion>,
     val latencyMs: Int,

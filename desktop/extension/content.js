@@ -148,7 +148,7 @@
   // ---------- Asking the server ----------
 
   const NOTHING_TO_REPLY =
-    "Nothing on screen to reply to. Tip: type what you want to say in the box, then press Alt+V to get it written in every style.";
+    'Nothing on screen to reply to. Tip: type what you want to say in the box, or ask for something ("pickup line", "bday wish"), then press Alt+V.';
 
   /** Text in the box: write what I mean in every style. Otherwise (or with [forceReply]):
    *  replies to their newest messages, finishing anything typed. */
@@ -409,15 +409,20 @@
     setBody(
       [...nodes, ...cards(r.suggestions)],
       [intent, r.language].filter(Boolean).join(" · ") +
-        "\nTip: type an idea in the box first, then press Alt+V to get it written in every style.",
+        '\nTip: type an idea in the box (or ask: "pickup line", "roast him"), then press Alt+V.',
     );
   }
 
+  /** Write it for me: my message in every style, or, if I asked for something ("pickup line"), 4 ideas. */
   function showCompose(r) {
+    const ideas = r.kind === "ideas";
     const labels = Object.fromEntries(STYLES);
-    const suggestions = r.variants.filter((v) => labels[v.style]).map((v) => ({ label: labels[v.style], text: v.text }));
+    const suggestions = ideas
+      ? (r.ideas || []).map((i) => ({ label: i.label || "Idea", text: i.text }))
+      : r.variants.filter((v) => labels[v.style]).map((v) => ({ label: labels[v.style], text: v.text }));
     lastResult = { suggestions };
-    const nodes = r.meaning ? [el("div", "vakya-meaning", "✍️ " + r.meaning)] : [];
+    if (ideas && panel) panel.querySelector(".vakya-label").textContent = "IDEAS FOR YOU · TAP ONE TO USE IT";
+    const nodes = r.meaning ? [el("div", "vakya-meaning", (ideas ? "💡 " : "✍️ ") + r.meaning)] : [];
     setBody([...nodes, ...cards(suggestions)], [r.language, "pick one to replace your text"].filter(Boolean).join(" · "));
   }
 

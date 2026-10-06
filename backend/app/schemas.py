@@ -161,10 +161,25 @@ class ComposeVariant(BaseModel):
     text: str = Field(description="The message exactly as it would be sent.")
 
 
+class ComposeIdea(BaseModel):
+    label: str = Field(description="1-2 words naming its flavour: Cheesy, Smooth, Funny, Sweet, Savage...")
+    text: str = Field(description="The message exactly as it would be sent.")
+
+
 class ComposeOutput(BaseModel):
-    meaning: str = Field(default="", description="What I want to tell them, in plain English, one short sentence.")
+    # First, so the model decides what was typed before writing anything.
+    kind: Literal["message", "ideas"] = Field(
+        default="message",
+        description="message: I said what I want to say. ideas: I asked for something to send (a pickup line, a joke...).",
+    )
+    meaning: str = Field(default="", description="What I want to tell them, or what I asked for, in plain English, one short sentence.")
     language: str = Field(description="Language and script used, e.g. 'Kannada-English (Latin script)'.")
-    variants: list[ComposeVariant] = Field(description="Exactly 4, one per style: mine, professional, short, genz.")
+    variants: list[ComposeVariant] = Field(
+        default_factory=list, description="kind=message: exactly 4, one per style: mine, professional, short, genz. Else empty."
+    )
+    ideas: list[ComposeIdea] = Field(
+        default_factory=list, description="kind=ideas: exactly 4 different ideas, each with its own label. Else empty."
+    )
 
 
 class ComposeResponse(ComposeOutput):

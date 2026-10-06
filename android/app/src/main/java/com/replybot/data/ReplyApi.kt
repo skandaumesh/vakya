@@ -116,15 +116,25 @@ class ReplyApi(
             .put("intent", intent.take(1000))
 
         fun parseCompose(j: JSONObject): ComposeResult {
-            val labels = STYLES.toMap()
-            val arr = j.getJSONArray("variants")
-            val variants = (0 until arr.length()).mapNotNull {
-                val v = arr.getJSONObject(it)
-                val label = labels[v.optString("style")] ?: return@mapNotNull null
-                Suggestion(label, v.getString("text"))
+            val ideas = j.optString("kind") == "ideas"
+            val variants = if (ideas) {
+                val arr = j.optJSONArray("ideas") ?: JSONArray()
+                (0 until arr.length()).map {
+                    val v = arr.getJSONObject(it)
+                    Suggestion(v.optString("label", "Idea"), v.getString("text"))
+                }
+            } else {
+                val labels = STYLES.toMap()
+                val arr = j.getJSONArray("variants")
+                (0 until arr.length()).mapNotNull {
+                    val v = arr.getJSONObject(it)
+                    val label = labels[v.optString("style")] ?: return@mapNotNull null
+                    Suggestion(label, v.getString("text"))
+                }
             }
             return ComposeResult(
                 meaning = j.optString("meaning"),
+                ideas = ideas,
                 language = j.optString("language"),
                 variants = variants,
                 latencyMs = j.optInt("latency_ms"),

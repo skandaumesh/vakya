@@ -125,3 +125,29 @@ def test_compose_retries_when_it_talks_about_the_chat_person(fake_parse):
     r = client.post("/compose", json={"intent": "ask him if he is coming for the party tomorrow"})
     assert fake_parse["n"] == 2
     assert r.json()["variants"][0]["text"] == "naale party ge bartiya?"
+
+
+def test_compose_returns_ideas_when_i_ask_for_something_to_send(fake_parse):
+    from app.schemas import ComposeIdea
+    fake_parse["outputs"] = [ComposeOutput(
+        kind="ideas", meaning="A cheesy pickup line for Priya", language="English",
+        ideas=[
+            ComposeIdea(label="Cheesy", text='"Are you coffee? Because I like you a latte."'),
+            ComposeIdea(label="Smooth", text="Coffee tomorrow? I promise better lines in person."),
+            ComposeIdea(label="cheesy", text="are you coffee? because i like you a latte."),  # duplicate, dropped
+            ComposeIdea(label="Desi", text="Chai ya coffee, I'm down for both if it's with you."),
+            ComposeIdea(label="Funny", text="My pickup lines are bad but my coffee taste is great."),
+            ComposeIdea(label="Extra", text="Only 4 are kept."),
+        ],
+    )]
+    r = client.post("/compose", json={"intent": "pickup line", "chat_title": "Priya"})
+    data = r.json()
+    assert data["kind"] == "ideas" and data["variants"] == []
+    assert [i["label"] for i in data["ideas"]] == ["Cheesy", "Smooth", "Desi", "Funny"]
+    assert data["ideas"][0]["text"] == "Are you coffee? Because I like you a latte."
+
+
+def test_compose_message_kind_has_no_ideas(fake_parse):
+    fake_parse["outputs"] = [output(("mine", "naale bartiya?"))]
+    data = client.post("/compose", json={"intent": "ask him if he is coming"}).json()
+    assert data["kind"] == "message" and data["ideas"] == [] and data["variants"]

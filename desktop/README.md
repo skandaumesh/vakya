@@ -2,7 +2,7 @@
 
 A browser extension for Chrome, Edge and Brave. On [web.whatsapp.com](https://web.whatsapp.com), a round Vakya button sits above the message box. Clicking it (or pressing **Alt+V**) shows 3 replies to their newest messages. If your own message is the last one, it suggests follow-ups instead. Clicking a reply, or pressing **Alt+1/2/3**, types it into the box. You still press Enter to send.
 
-**Write it for me:** type what you want to say in your own words first ("ask him if he's coming tomorrow"), then press Alt+V. You get it written 4 ways: My style, Professional, Short and Gen Z (Alt+1 to 4). The one you pick replaces what you typed.
+**Write it for me:** type what you want to say in your own words first ("ask him if he's coming tomorrow"), then press Alt+V. You get it written 4 ways: My style, Professional, Short and Gen Z (Alt+1 to 4). The one you pick replaces what you typed. You can also ask for something to send ("pickup line", "roast him", "bday wish for amma") and get 4 different ideas that fit the chat.
 
 It uses the same server, styles and daily limit as the phone app.
 

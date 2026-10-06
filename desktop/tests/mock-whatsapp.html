@@ -2,7 +2,7 @@
 <!-- A stand-in for WhatsApp Web, to check the Vakya panel without a WhatsApp account.
      Open in a browser (or headless: see desktop/README.md). Hash options, comma-separated:
      #dark = WhatsApp dark mode, #open = open the panel, #pick = also choose reply 1, #group = group chat,
-     #draft = text already typed in the box (write-it-for-me mode), #oldserver = a server without /compose, #back = click "Replies instead", #mylast = my message is the last one,
+     #draft = text already typed in the box (write-it-for-me mode), #oldserver = a server without /compose, #back = click "Replies instead", #ideas = the server answers with ideas, #mylast = my message is the last one,
      #new = a redesigned page with none of the ids/classes Vakya knows (no #main, footer, header,
             role=row, .message-in/.message-out, body.dark), plus a search box at the top. -->
 <html lang="en">
@@ -102,7 +102,17 @@
           window.requests.push(msg);
           await new Promise((r) => setTimeout(r, 150));
           if (msg.type === "compose" && opts.has("oldserver")) return { ok: false, status: 404, error: "Server error 404: Not Found" };
+          if (msg.type === "compose" && opts.has("ideas")) return { ok: true, data: {
+            kind: "ideas", meaning: "A cheesy pickup line about coffee.", language: "English", variants: [],
+            ideas: [
+              { label: "Cheesy", text: "are you a coffee bean? because you've been keeping me up all day" },
+              { label: "Smooth", text: "must be nice being your coffee, getting all your attention" },
+              { label: "Funny", text: "at this rate your blood type is gonna be 100 percent caffeine" },
+              { label: "Cute", text: "save some energy for our chat at least" },
+            ],
+          } };
           if (msg.type === "compose") return { ok: true, data: {
+            kind: "message",
             meaning: "Ask him if he's coming to the party tomorrow.", language: "Kanglish",
             variants: [
               { style: "mine", text: "naale party ge bartiya maga?" },

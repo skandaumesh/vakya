@@ -52,6 +52,9 @@ Is it private?
      ("ask him if he's coming tomorrow"), then tap the bubble. You get it
      written 4 ways: My style, Professional, Short and Gen Z. Tap one to
      replace what you typed.
+   - Or ask for something to send: type "pickup line", "roast him",
+     "bday wish for amma" or "how do I say no politely", then tap the bubble
+     for 4 different ideas that fit the chat.
    - If your message is the last one in the chat, Vakya suggests follow-ups
      (a nudge or an update) instead of replies.
 

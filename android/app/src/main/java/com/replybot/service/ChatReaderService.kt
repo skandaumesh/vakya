@@ -145,7 +145,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
                 draft.isNotEmpty() -> requestCompose()
                 messages.isEmpty() -> {
                     updateHeader()
-                    overlay.showError("Nothing on screen to reply to. Tip: type what you want to say in the box, then tap Vakya to get it written in every style.")
+                    overlay.showError("Nothing on screen to reply to. Tip: type what you want to say in the box, or ask for something (\"pickup line\", \"bday wish\"), then tap Vakya.")
                 }
                 else -> {
                     updateHeader()
