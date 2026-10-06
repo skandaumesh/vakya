@@ -27,10 +27,12 @@ PRESETS = {
     "gemini": {
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
         "key_env": "GEMINI_API_KEY",
-        # Flash-Lite: ~1.3 s and good Kanglish; full Flash is often "experiencing high demand"
-        # on the free tier, and gemini-2.5-* is closed to new users.
+        # Flash-Lite: ~1.5 s and good Kanglish. On a free key the bigger Flash models are
+        # rate-limited from the first request and gemini-2.5-* is closed to new users, so the
+        # backups are other Lite models: each has its own capacity when one answers
+        # "503 high demand" (checked 2026-10-06).
         "model": "gemini-flash-lite-latest",
-        "fallback_models": ["gemini-3.8-flash", "gemini-flash-latest"],
+        "fallback_models": ["gemini-3.5-flash-lite", "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite"],
         "vision_model": "gemini-flash-lite-latest",
         "json_mode": "schema",
         "max_tokens_param": "max_tokens",
