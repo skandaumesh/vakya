@@ -29,7 +29,7 @@ async def lifespan(_: FastAPI):
 # In production the interactive API docs (/docs, /redoc, /openapi.json) are hidden:
 # no need to show strangers how to call the server.
 _docs = {} if config.SHOW_DOCS else {"docs_url": None, "redoc_url": None, "openapi_url": None}
-app = FastAPI(title="Vakya", version="0.4.1", lifespan=lifespan, **_docs)
+app = FastAPI(title="Vakya", version="0.4.2", lifespan=lifespan, **_docs)
 
 
 def require_app_key(x_vakya_key: str | None = Header(default=None)) -> None:
