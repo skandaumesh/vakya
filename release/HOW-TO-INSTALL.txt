@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.4.0.apk → Install.
+   b. Open Vakya-0.4.1.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.
@@ -75,11 +75,11 @@ Good to know
      into Vakya → "Your own Groq key (optional)" → Save and test.
 
 On a laptop (WhatsApp Web, in Chrome, Edge or Brave)
-   1. Right-click Vakya-Desktop-0.4.0.zip → Extract All. Keep the folder somewhere safe
+   1. Right-click Vakya-Desktop-0.4.1.zip → Extract All. Keep the folder somewhere safe
       (not in Downloads, if you clear it).
    2. Open chrome://extensions (Edge: edge://extensions) and turn ON
       "Developer mode" (top right in Chrome, left side in Edge).
-   3. Click "Load unpacked" and pick the Vakya-Desktop-0.4.0 folder
+   3. Click "Load unpacked" and pick the Vakya-Desktop-0.4.1 folder
       (the one with manifest.json directly inside).
    4. Click the puzzle piece in the toolbar and pin Vakya. Click the Vakya
       icon to open its settings; it should say "Connected".

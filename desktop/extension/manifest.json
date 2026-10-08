@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Vakya: replies in your style",
   "short_name": "Vakya",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Reply suggestions in your own style, right inside WhatsApp Web. By OneZeroLabs.",
   "icons": {
     "16": "icons/icon16.png",

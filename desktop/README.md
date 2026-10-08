@@ -8,7 +8,7 @@ It uses the same server, styles and daily limit as the phone app. Under the styl
 
 ## Install (for you and friends)
 
-1. Right-click `release/Vakya-Desktop-0.4.0.zip` → **Extract All**. You get a `Vakya-Desktop-0.4.0` folder with `manifest.json` inside; keep it somewhere it won't be deleted.
+1. Right-click `release/Vakya-Desktop-0.4.1.zip` → **Extract All**. You get a `Vakya-Desktop-0.4.1` folder with `manifest.json` inside; keep it somewhere it won't be deleted.
 2. Open `chrome://extensions` (Edge: `edge://extensions`, Brave: `brave://extensions`) and turn on **Developer mode**.
 3. Click **Load unpacked** and pick that folder (the one with `manifest.json` in it).
 
