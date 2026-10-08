@@ -239,6 +239,14 @@ class MainActivity : Activity() {
                 isHorizontalScrollBarEnabled = false
                 addView(row)
             }, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT).apply { topMargin = px(6) })
+            addView(text(
+                "In a chat, drag the round Vakya bubble anywhere it doesn't get in your way. It remembers the spot.",
+                13f, muted = true,
+            ))
+            addView(glassButton("Reset bubble position", primary = false) {
+                store.bubbleOffset = 0 to 0
+                toast("The bubble is back above the message box.")
+            })
         }
         col.addView(lookCard)
 

@@ -77,6 +77,11 @@ async function showThemes() {
   }));
 }
 
+$("reset-fab").addEventListener("click", async () => {
+  await chrome.storage.local.set({ fabOffset: { dx: 0, dy: 0 } });
+  $("reset-fab").textContent = "✓ Back above the message box";
+});
+
 // ---------- Style ----------
 
 async function showStyle() {

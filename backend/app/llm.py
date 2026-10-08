@@ -14,6 +14,7 @@ from .prompts import (
     SUGGEST_SYSTEM,
     chat_mix,
     compose_mix,
+    is_idea_request,
     render_compose_input,
     render_style_input,
     render_suggest_input,
@@ -248,6 +249,10 @@ async def compose_message(req: ComposeRequest) -> ComposeResponse:
             f"\n\n<note>Your previous versions stated amounts I never mentioned ({', '.join(invented)}). "
             "Write them again without any price or amount that isn't in what I want to say, the chat or memory.</note>"
         )
+        out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + note, ComposeOutput, max_tokens=1500, prefer=prefer)
+        elapsed_ms += retry_ms
+    elif out.kind == "message" and is_idea_request(req.intent):
+        note = "\n\n<note>I asked you for something to send, not to reword my text. Set kind to ideas and write 4 different ideas.</note>"
         out, retry_ms = await _parse(COMPOSE_SYSTEM, user_content + note, ComposeOutput, max_tokens=1500, prefer=prefer)
         elapsed_ms += retry_ms
     elif out.kind == "message" and talks_about_them(req.intent, [v.text for v in out.variants]):

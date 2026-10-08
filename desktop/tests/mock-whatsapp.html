@@ -153,6 +153,25 @@
     if (opts.has("open") || opts.has("pick")) setTimeout(() => press("v"), 800);
     if (opts.has("pick")) setTimeout(() => press("1"), 1600);
     if (opts.has("back")) setTimeout(() => document.querySelector(".vakya-back").click(), 1400);
+    // #drag: drag the round button 200px left and 300px up, then check it stays and no panel opened.
+    if (opts.has("drag")) {
+      setTimeout(() => {
+        const fab = document.querySelector(".vakya-fab");
+        const r = fab.getBoundingClientRect();
+        const at = (x, y) => ({ clientX: x, clientY: y, bubbles: true, button: 0 });
+        fab.dispatchEvent(new MouseEvent("mousedown", at(r.left + 5, r.top + 5)));
+        document.dispatchEvent(new MouseEvent("mousemove", at(r.left - 95, r.top - 145)));
+        document.dispatchEvent(new MouseEvent("mousemove", at(r.left - 195, r.top - 295)));
+        document.dispatchEvent(new MouseEvent("mouseup", at(r.left - 195, r.top - 295)));
+        fab.dispatchEvent(new MouseEvent("click", at(r.left - 195, r.top - 295)));
+        window.fabBefore = [Math.round(r.left), Math.round(r.top)];
+      }, 900);
+    }
+    // #typelater: type "roast him" after the panel opened, then click the offer.
+    if (opts.has("typelater")) {
+      setTimeout(() => { document.querySelector(".compose [contenteditable]").textContent = "roast him"; }, 1100);
+      setTimeout(() => document.querySelector(".vakya-typed")?.click(), 2000);
+    }
     if (opts.has("english")) setTimeout(() => document.querySelector('.vakya-lang[data-lang="english"]').click(), 1400);
     // For headless --dump-dom checks: what was sent, what ended up in the box, and the settings-page check.
     setTimeout(() => {
@@ -172,6 +191,8 @@
         notes: [...document.querySelectorAll(".vakya-meaning, .vakya-note")].map((c) => c.textContent),
         modeLabel: document.querySelector(".vakya-label")?.textContent ?? null,
         type: window.requests.at(-1)?.type ?? null,
+        fab: (() => { const f = document.querySelector(".vakya-fab"); return f ? [f.offsetLeft, f.offsetTop] : null; })(),
+        fabBefore: window.fabBefore ?? null,
         language: window.requests.at(-1)?.body?.language ?? null,
         requests: window.requests.length,
         langOn: document.querySelector(".vakya-lang.is-on")?.dataset.lang ?? null,
@@ -179,7 +200,7 @@
         check,
       });
       document.body.append(out);
-    }, 2400);
+    }, 3000);
   </script>
 </body>
 </html>

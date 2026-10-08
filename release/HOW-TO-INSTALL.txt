@@ -48,6 +48,8 @@ Is it private?
    - Open any WhatsApp chat and tap the message box.
    - Tap the round Vakya bubble above it → pick a reply → it's typed for you.
      You still press Send yourself.
+   - Bubble in the way? Drag it anywhere; it remembers the spot. (Vakya →
+     "Reset bubble position" puts it back.)
    - Choose a style at the top: My style · Professional · Short · Gen Z.
    - Choose the language under it: Auto · English · Kanglish · ಕನ್ನಡ · Hinglish.
      Vakya remembers it for that chat. Auto replies in the language they use.

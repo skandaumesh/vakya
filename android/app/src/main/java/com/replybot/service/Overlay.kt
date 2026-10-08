@@ -8,7 +8,9 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.text.TextUtils
 import android.view.Gravity
+import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.view.ViewGroup.LayoutParams.WRAP_CONTENT
 import android.view.WindowManager
 import android.view.ViewOutlineProvider
@@ -24,6 +26,7 @@ import com.replybot.data.STYLES
 import com.replybot.data.Store
 import com.replybot.data.SuggestResult
 import com.replybot.data.Suggestion
+import kotlin.math.hypot
 import kotlin.math.roundToInt
 
 /**
@@ -41,6 +44,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         fun onAiRequested()
         fun onRepliesInstead()
         fun onLanguageChange(language: String)
+        fun onWriteTyped()
     }
 
     private companion object {
@@ -69,6 +73,11 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
 
     private var bubble: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
+    /** The bubble's usual spot for the current message box; the user's drag is an offset from it. */
+    private var bubbleBaseX = 0
+    private var bubbleBaseY = 0
+    private var dragging = false
+    private val touchSlop = ViewConfiguration.get(ctx).scaledTouchSlop
 
     private var panel: LinearLayout? = null
     private var panelParams: WindowManager.LayoutParams? = null
@@ -76,6 +85,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     private lateinit var styleRow: LinearLayout
     private lateinit var styleScroll: HorizontalScrollView
     private lateinit var languageRow: LinearLayout
+    private lateinit var typedBar: TextView
     private lateinit var body: LinearLayout
     private lateinit var footer: TextView
     private var anchor = Rect()
@@ -108,10 +118,13 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     // ---------- Bubble ----------
 
     fun showBubble(input: Rect) {
-        if (panel != null) return
+        if (panel != null || dragging) return
         val size = px(44)  // big enough for the wordmark to read
-        val x = input.right - size - px(4)
-        val y = input.top - size - px(8)
+        bubbleBaseX = input.right - size - px(4)
+        bubbleBaseY = input.top - size - px(8)
+        val (dx, dy) = Store.get(ctx).bubbleOffset
+        val x = clampX(bubbleBaseX + dx, size)
+        val y = clampY(bubbleBaseY + dy, size)
         bubble?.let { view ->
             val p = bubbleParams ?: return
             if (p.x != x || p.y != y) {
@@ -142,8 +155,9 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
                 scaleX = 1.45f
                 scaleY = 1.45f
             }, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
-            contentDescription = "Vakya: suggest replies"
+            contentDescription = "Vakya: suggest replies. Drag to move."
             setOnClickListener { cb.onBubbleTap() }
+            setOnTouchListener(dragToMove(size))
         }
         val p = windowParams().apply {
             width = size
@@ -156,7 +170,61 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         bubbleParams = p
     }
 
+    private fun clampX(x: Int, size: Int) = x.coerceIn(0, ctx.resources.displayMetrics.widthPixels - size)
+    private fun clampY(y: Int, size: Int) = y.coerceIn(px(24), ctx.resources.displayMetrics.heightPixels - size)
+
+    /**
+     * Drag the bubble anywhere; a tap (less than the system's touch slop of movement) still
+     * opens the panel. The new spot is saved as an offset from the usual one.
+     */
+    private fun dragToMove(size: Int) = object : View.OnTouchListener {
+        private var downX = 0f
+        private var downY = 0f
+        private var startX = 0
+        private var startY = 0
+
+        override fun onTouch(v: View, e: MotionEvent): Boolean {
+            val p = bubbleParams ?: return false
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.rawX
+                    downY = e.rawY
+                    startX = p.x
+                    startY = p.y
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - downX
+                    val dy = e.rawY - downY
+                    if (!dragging && hypot(dx, dy) > touchSlop) {
+                        dragging = true
+                        v.animate().scaleX(1.15f).scaleY(1.15f).setDuration(120).start()
+                    }
+                    if (dragging) {
+                        p.x = clampX(startX + dx.roundToInt(), size)
+                        p.y = clampY(startY + dy.roundToInt(), size)
+                        wm.updateViewLayout(v, p)
+                    }
+                }
+                MotionEvent.ACTION_UP -> {
+                    if (dragging) {
+                        dragging = false
+                        v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                        Store.get(ctx).bubbleOffset = (p.x - bubbleBaseX) to (p.y - bubbleBaseY)
+                    } else {
+                        v.performClick()
+                    }
+                }
+                MotionEvent.ACTION_CANCEL -> if (dragging) {
+                    dragging = false
+                    v.animate().scaleX(1f).scaleY(1f).setDuration(120).start()
+                }
+            }
+            return true
+        }
+    }
+
     fun hideBubble() {
+        dragging = false
         bubble?.let { runCatching { wm.removeView(it) } }
         bubble = null
         bubbleParams = null
@@ -196,6 +264,17 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         styleRow.removeAllViews()
         STYLES.forEach { (value, label) ->
             styleRow.addView(pill(label, selected = value == style) { cb.onStyleChange(value) }, pillMargins())
+        }
+    }
+
+    /** Offer to write [typed] (what's in the message box now), or hide the offer when null. */
+    fun showTyped(typed: String?) {
+        if (panel == null) return
+        val visible = !typed.isNullOrBlank()
+        if (visible) typedBar.text = "✍️ Write “${typed!!.take(40)}” for me"
+        if ((typedBar.visibility == View.VISIBLE) != visible) {
+            typedBar.visibility = if (visible) View.VISIBLE else View.GONE
+            place()
         }
     }
 
@@ -368,6 +447,23 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
             isHorizontalScrollBarEnabled = false
             addView(languageRow)
         }, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP_CONTENT))
+
+        // Text typed while the panel is open: one tap writes it out (or answers the request).
+        typedBar = TextView(ctx).apply {
+            textSize = 14f
+            setTextColor(accent)
+            typeface = Typeface.DEFAULT_BOLD
+            gravity = Gravity.CENTER
+            setPadding(px(12), px(9), px(12), px(9))
+            background = rounded(bg, 12, stroke = accent)
+            maxLines = 1
+            ellipsize = TextUtils.TruncateAt.END
+            visibility = View.GONE
+            setOnClickListener { cb.onWriteTyped() }
+        }
+        root.addView(typedBar, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, WRAP_CONTENT).apply {
+            topMargin = px(8)
+        })
 
         body = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
         root.addView(body)

@@ -151,3 +151,27 @@ def test_compose_message_kind_has_no_ideas(fake_parse):
     fake_parse["outputs"] = [output(("mine", "naale bartiya?"))]
     data = client.post("/compose", json={"intent": "ask him if he is coming"}).json()
     assert data["kind"] == "message" and data["ideas"] == [] and data["variants"]
+
+
+@pytest.mark.parametrize("text, asks", [
+    ("roast him", True), ("roast", True), ("give me a roast", True), ("pickup line", True), ("pick up lines", True),
+    ("tell him a joke", True), ("something funny", True), ("flirt with her", True), ("compliment him", True),
+    ("bday wish for amma", True), ("how do i reply to this", True), ("What should I say?", True), ("rizz", True),
+    ("ask him if he is coming tomorrow", False), ("tell her the site will be late", False),
+    ("naale baroke agalla sorry", False), ("that movie was funny", False), ("ok see you at 6", False),
+])
+def test_idea_requests_are_recognised(text, asks):
+    from app.prompts import is_idea_request
+    assert is_idea_request(text) is asks
+
+
+def test_an_idea_request_answered_as_a_message_is_retried(fake_parse):
+    from app.schemas import ComposeIdea
+    fake_parse["outputs"] = [
+        output(("mine", "can i roast you?")),
+        ComposeOutput(kind="ideas", meaning="A roast", language="English",
+                      ideas=[ComposeIdea(label="Savage", text="those arms need a search warrant")]),
+    ]
+    data = client.post("/compose", json={"intent": "roast him"}).json()
+    assert fake_parse["n"] == 2 and data["kind"] == "ideas"
+    assert "kind is ideas" in fake_parse["user_content"]

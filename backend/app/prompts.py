@@ -427,6 +427,25 @@ def render_suggest_input(req: SuggestRequest, media_notes: dict[int, str] | None
     return "\n\n".join(parts)
 
 
+# Typed text that asks for something to send ("roast him", "pickup line", "how do I reply?")
+# rather than saying what to send. Matched at the start, so a real message that happens
+# to contain "funny" isn't mistaken for a request.
+_IDEA_REQUEST = re.compile(
+    r"^\s*(?:pls\s+|please\s+)?(?:(?:give|send|write|suggest|tell|make|need|want|get)\s+(?:me\s+|him\s+|her\s+|them\s+)?"
+    r"(?:a\s+|an\s+|some\s+|one\s+)?)?"
+    r"(?:roast\w*|pick\s*-?\s*up\s*lines?|rizz|flirt\w*|jokes?|comebacks?|compliments?|tease|shayari|puns?|ideas?|"
+    r"savage\s+(?:reply|line|msg|message)|funny\s+(?:reply|line|msg|message|joke)|something\s+\w+|"
+    r"(?:b'?day|birthday|anniversary|diwali|new\s+year|festival|good\s+morning|good\s+night)\s+(?:wish|wishes|msg|message|text|quote)|"
+    r"motivat\w+|cheer\s+(?:him|her|them)\s+up|make\s+(?:him|her|them)\s+(?:laugh|smile))\b"
+    r"|^\s*(?:how|what)\s+(?:do|can|should|shall)\s+i\s+(?:say|reply|respond|tell|ask|send|text|write)\b",
+    re.IGNORECASE,
+)
+
+
+def is_idea_request(text: str) -> bool:
+    return bool(_IDEA_REQUEST.search(text))
+
+
 def render_compose_input(req: ComposeRequest) -> str:
     context = [
         f"app: {req.app}",
@@ -463,6 +482,8 @@ def render_compose_input(req: ComposeRequest) -> str:
             who = "me" if m.sender == "me" else (m.name or "them") if req.is_group else "them"
             lines.append(f"{who}: {_render_message(m, None)}")
         parts.append("<conversation>\n" + "\n".join(lines) + "\n</conversation>")
+    if is_idea_request(req.intent):
+        parts.append("<note>What I typed asks you for something to send, so kind is ideas: write 4 different ideas.</note>")
     parts.append(f"<what_i_want_to_say>{_q(req.intent.strip())}</what_i_want_to_say>")
     return "\n\n".join(parts)
 

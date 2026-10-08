@@ -18,15 +18,20 @@
   let lastResult = null;
 
   let panelTheme = "auto";
+  // Where the user dragged the round button, in px from its usual spot above the message box.
+  let fabOffset = { dx: 0, dy: 0 };
+  let fabDrag = null; // {x, y, left, top, moved} while the mouse is down on the button
   const THEMES = ["white", "navy", "black", "rose", "mint", "glass"];
 
-  chrome.storage.local.get(["style", "panelTheme"]).then((s) => {
+  chrome.storage.local.get(["style", "panelTheme", "fabOffset"]).then((s) => {
     if (STYLES.some(([v]) => v === s.style)) style = s.style;
     if (THEMES.includes(s.panelTheme)) panelTheme = s.panelTheme;
+    if (s.fabOffset) fabOffset = s.fabOffset;
   });
-  // A new background picked in settings shows at once.
+  // A new background (or a reset button position) from settings shows at once.
   chrome.storage.onChanged.addListener((changes) => {
     if (changes.panelTheme) panelTheme = changes.panelTheme.newValue || "auto";
+    if (changes.fabOffset) fabOffset = changes.fabOffset.newValue || { dx: 0, dy: 0 };
   });
 
   // ---------- Reading WhatsApp Web ----------
@@ -161,6 +166,7 @@
   /** Text in the box: write what I mean in every style. Otherwise (or with [forceReply]):
    *  replies to their newest messages, finishing anything typed. */
   let lastForceReply = false;
+  let shownDraft = null; // the typed text the panel's write-it-for-me results are for
 
   async function suggest(forceReply = false) {
     lastForceReply = forceReply;
@@ -183,6 +189,7 @@
       image: withImage === i ? toJpeg(m.img) : null,
     }));
 
+    shownDraft = draft && !forceReply ? draft : null;
     if (draft && !forceReply) {
       setMode("compose");
       const res = await ask("compose", {
@@ -304,18 +311,64 @@
       img.src = LOGO;
       img.alt = "Vakya";
       button.append(img);
-      button.addEventListener("mousedown", keepFocus);
-      button.addEventListener("click", togglePanel);
+      button.addEventListener("mousedown", startFabDrag);
+      button.addEventListener("click", (e) => {
+        if (button.dataset.dragged) {
+          delete button.dataset.dragged; // the click that ends a drag doesn't open the panel
+          e.preventDefault();
+          return;
+        }
+        togglePanel();
+      });
       document.body.append(button);
     }
     const r = box.getBoundingClientRect();
-    button.style.left = `${Math.round(r.right - 46)}px`;
-    button.style.top = `${Math.round(r.top - 54)}px`;
+    if (!fabDrag) {
+      const left = Math.round(r.right - 46 + fabOffset.dx);
+      const top = Math.round(r.top - 54 + fabOffset.dy);
+      button.style.left = `${Math.max(0, Math.min(left, window.innerWidth - 40))}px`;
+      button.style.top = `${Math.max(0, Math.min(top, window.innerHeight - 40))}px`;
+    }
     button.style.display = panel ? "none" : "";
     if (panel) {
       if (chatTitle() !== openTitle) closePanel(); // switched chats
-      else placePanel(r);
+      else {
+        placePanel(r);
+        showTyped(box);
+      }
     }
+  }
+
+  /** Drag the round button anywhere; a plain click still opens the panel. */
+  function startFabDrag(e) {
+    keepFocus(e);
+    if (e.button !== 0) return;
+    fabDrag = { x: e.clientX, y: e.clientY, left: button.offsetLeft, top: button.offsetTop, moved: false };
+    const move = (ev) => {
+      const dx = ev.clientX - fabDrag.x;
+      const dy = ev.clientY - fabDrag.y;
+      if (!fabDrag.moved && Math.hypot(dx, dy) < 4) return;
+      fabDrag.moved = true;
+      button.classList.add("is-dragging");
+      button.style.left = `${Math.max(0, Math.min(fabDrag.left + dx, window.innerWidth - 40))}px`;
+      button.style.top = `${Math.max(0, Math.min(fabDrag.top + dy, window.innerHeight - 40))}px`;
+    };
+    const up = () => {
+      document.removeEventListener("mousemove", move, true);
+      document.removeEventListener("mouseup", up, true);
+      button.classList.remove("is-dragging");
+      if (fabDrag.moved) {
+        button.dataset.dragged = "1";
+        const r = composeBox()?.getBoundingClientRect();
+        if (r) {
+          fabOffset = { dx: button.offsetLeft - Math.round(r.right - 46), dy: button.offsetTop - Math.round(r.top - 54) };
+          chrome.storage.local.set({ fabOffset });
+        }
+      }
+      fabDrag = null;
+    };
+    document.addEventListener("mousemove", move, true);
+    document.addEventListener("mouseup", up, true);
   }
 
   function togglePanel() {
@@ -377,6 +430,13 @@
       langRow.append(pill);
     }
     styles.append(langLabel, langRow);
+
+    // Text typed while the panel is open: one click writes it out (or answers the request).
+    const typed = el("button", "vakya-typed");
+    typed.type = "button";
+    typed.hidden = true;
+    typed.addEventListener("click", () => suggest(false));
+    styles.append(typed);
     panel.append(head, styles, el("div", "vakya-body"), el("div", "vakya-foot"));
     panel.addEventListener("mousedown", (e) => {
       if (e.target.closest("button")) keepFocus(e);
@@ -403,6 +463,16 @@
     panel.style.width = `${width}px`;
     panel.style.left = `${Math.round(Math.max(8, Math.min(r.right + 40 - width, window.innerWidth - width - 8)))}px`;
     panel.style.bottom = `${Math.round(window.innerHeight - r.top + 10)}px`;
+  }
+
+  /** Offer "Write ... for me" when the box holds text the panel isn't already showing. */
+  function showTyped(box) {
+    const button = panel?.querySelector(".vakya-typed");
+    if (!button) return;
+    const text = box.innerText.trim();
+    const typed = text && !isPlaceholder(text) && text !== shownDraft ? text : "";
+    button.hidden = !typed;
+    if (typed) button.textContent = `✍️ Write “${typed.slice(0, 40)}” for me`;
   }
 
   function markLanguage(language) {

@@ -54,6 +54,14 @@ class Store private constructor(private val file: File, private val prefs: Share
         get() = prefs.getStringSet("enabled_apps", null)?.toSet() ?: DEFAULT_APPS
         set(v) = prefs.edit().putStringSet("enabled_apps", v).apply()
 
+    /**
+     * Where the user dragged the bubble, in pixels from its usual spot (just above the right
+     * end of the message box). Relative to the box, so it follows it when the keyboard opens.
+     */
+    var bubbleOffset: Pair<Int, Int>
+        get() = prefs.getInt("bubble_dx", 0) to prefs.getInt("bubble_dy", 0)
+        set(v) = prefs.edit().putInt("bubble_dx", v.first).putInt("bubble_dy", v.second).apply()
+
     /** Background of the chat panel: auto, white, navy, black, rose, mint or glass. */
     var panelTheme: String
         get() = prefs.getString("panel_theme", "auto") ?: "auto"

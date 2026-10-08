@@ -98,7 +98,10 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     override fun onAccessibilityEvent(event: AccessibilityEvent) {
         val pkg = event.packageName?.toString() ?: return
         if (pkg !in SUPPORTED || pkg !in store.enabledApps) return
-        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) trackTyping(event, pkg)
+        if (event.eventType == AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED) {
+            trackTyping(event, pkg)
+            if (overlay.isPanelShown) main.post { updateTypedHint() }
+        }
         main.removeCallbacks(refresh)
         main.postDelayed(refresh, REFRESH_DELAY_MS)
     }
@@ -318,6 +321,28 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
                     }
             }
         }
+    }
+
+    /** What's in the message box right now ("" for nothing or its grey hint). */
+    private fun typedNow(): String = chatInput()?.second?.let { ChatReader.draftText(it).trim() }.orEmpty()
+
+    /**
+     * Text typed after the panel opened ("roast him", "ask him if he's coming") isn't in the
+     * session yet: offer to write it out. Hidden when it's what the panel already shows.
+     */
+    private fun updateTypedHint() {
+        val s = session ?: return
+        val typed = typedNow()
+        overlay.showTyped(typed.takeIf { it.isNotEmpty() && !(composing && it == s.draft) })
+    }
+
+    override fun onWriteTyped() {
+        val s = session ?: return
+        val typed = typedNow()
+        if (typed.isEmpty()) return
+        session = s.copy(draft = typed)
+        overlay.showTyped(null)
+        requestCompose()
     }
 
     /** A language picked in the panel: remembered for this chat, and the panel redone in it. */
