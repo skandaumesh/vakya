@@ -62,6 +62,17 @@ class Store private constructor(private val file: File, private val prefs: Share
         get() = prefs.getInt("bubble_dx", 0) to prefs.getInt("bubble_dy", 0)
         set(v) = prefs.edit().putInt("bubble_dx", v.first).putInt("bubble_dy", v.second).apply()
 
+    /** Jarvis's to-do list ("add milk to my list"), on this phone only. */
+    val notes: List<String>
+        get() = runCatching { JSONArray(prefs.getString("jarvis_notes", "[]")).strings() }.getOrDefault(emptyList())
+
+    fun addNote(note: String) {
+        if (note.isBlank()) return
+        prefs.edit().putString("jarvis_notes", JSONArray((notes + note.trim()).takeLast(30)).toString()).apply()
+    }
+
+    fun clearNotes() = prefs.edit().remove("jarvis_notes").apply()
+
     /** "Hey Jarvis" is switched on (the listening service runs while this is true). */
     var jarvisOn: Boolean
         get() = prefs.getBoolean("jarvis_on", false)

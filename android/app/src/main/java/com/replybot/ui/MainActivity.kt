@@ -167,15 +167,21 @@ class MainActivity : Activity() {
         val jarvisCard = glassCard().apply {
             addView(cardHeading("Hey Jarvis", "VOICE"))
             addView(text(
-                "Say \"Hey Jarvis\", then what you need: \"tell him I'll be ten minutes late\", " +
-                    "\"what did she say?\", \"what should I reply?\", \"roast him\", or ask anything. " +
-                    "Jarvis writes into the open chat and answers out loud. You still press send.",
+                "Say \"Hey Jarvis\", then what you need. In a chat: \"tell him I'll be ten minutes late\", " +
+                    "\"what did she say?\", \"what should I reply?\", \"roast him\". Anywhere: \"set an alarm for 6\", " +
+                    "\"remind me in 20 minutes to call Amma\", \"open Instagram\", \"call Amma\", " +
+                    "\"message Rahul I'm on my way\", \"play Kesariya\", \"turn on the flashlight\", " +
+                    "\"add milk to my list\", or ask anything. After it answers, just keep talking; say \"thanks\" when you're done. " +
+                    "Jarvis never sends a message for you.",
                 14f,
             ))
             jarvisToggle = glassCheckBox("Listen for \"Hey Jarvis\"", store.jarvisOn) { checked ->
                 if (checked) turnOnJarvis() else turnOffJarvis()
             }
             addView(jarvisToggle)
+            addView(glassButton("Allow contacts (for \"call Amma\", \"message Rahul\")", primary = false) {
+                requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), REQUEST_CONTACTS)
+            })
             addView(glassButton("Talk to Jarvis now", primary = false) {
                 if (micAllowed()) JarvisService.start(this@MainActivity, JarvisService.ACTION_TALK)
                 else askForMic(talkAfter = true)
@@ -210,7 +216,8 @@ class MainActivity : Activity() {
                     "what it receives to improve its products, and people at Google may review it. Add your own " +
                     "Groq key below and your chats never go to Google.\n\n" +
                     "• Hey Jarvis (if you switch it on) listens for its name on this phone only. What you say " +
-                    "after it goes to Groq to become text, then to the Vakya server, and isn't kept.\n\n" +
+                    "after it goes to Groq to become text, then to the Vakya server, and isn't kept. " +
+                    "For calls and messages it looks names up in your contacts on this phone; contacts are never sent anywhere.\n\n" +
                     "• Don't use Vakya on chats with OTPs, passwords or bank details.",
                 14f,
             ))
@@ -484,6 +491,11 @@ class MainActivity : Activity() {
     override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
         @Suppress("DEPRECATION")
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CONTACTS) {
+            val ok = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
+            toast(if (ok) "Jarvis can call and message your contacts now." else "Without contacts, Jarvis can only call numbers you say.")
+            return
+        }
         if (requestCode != REQUEST_MIC) return
         if (micAllowed()) {
             if (talkAfterPermission) JarvisService.start(this, JarvisService.ACTION_TALK) else turnOnJarvis()
@@ -799,6 +811,7 @@ class MainActivity : Activity() {
     companion object {
         private const val REQUEST_EXPORT = 1
         private const val REQUEST_MIC = 2
+        private const val REQUEST_CONTACTS = 3
     }
 }
 

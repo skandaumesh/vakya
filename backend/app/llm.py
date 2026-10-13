@@ -348,7 +348,14 @@ async def jarvis(req: JarvisRequest, audio: bytes | None) -> JarvisResponse:
                               latency_ms=int((time.perf_counter() - started) * 1000))
 
     plan: JarvisPlan
-    plan, _ = await _parse(JARVIS_SYSTEM, render_jarvis_input(req, heard), JarvisPlan, max_tokens=800)
+    jarvis_input = render_jarvis_input(req, heard)
+    try:
+        plan, _ = await _parse(JARVIS_SYSTEM, jarvis_input, JarvisPlan, max_tokens=800)
+    except LLMError as e:
+        if isinstance(e, (RateLimited, ProviderTimeout, ProviderUnavailable, LLMRefusal)):
+            raise
+        # Malformed output (Groq's json_validate_failed): one more go, on the other provider if there is one.
+        plan, _ = await _parse(JARVIS_SYSTEM, jarvis_input, JarvisPlan, max_tokens=800, prefer=config.KANGLISH_PROVIDER)
     say = strip_slurs(plan.say.strip()) or "Done, boss."
     action = plan.action
     if action in ("write", "suggest", "read") and not req.in_chat:
@@ -359,7 +366,12 @@ async def jarvis(req: JarvisRequest, audio: bytes | None) -> JarvisResponse:
         relationship=req.relationship, style_card=req.style_card, examples=req.examples,
         memory=req.memory, language=req.language,
     )
-    compose = suggest = None
+    compose = suggest = task = None
+    if action == "device":
+        if plan.task.kind == "none":
+            action = "answer"
+        else:
+            task = plan.task
     if action == "write":
         compose = await compose_message(ComposeRequest(intent=(plan.intent or heard)[:1000], **context))
         if compose.kind == "ideas":
@@ -371,6 +383,6 @@ async def jarvis(req: JarvisRequest, audio: bytes | None) -> JarvisResponse:
         else:
             action, say = "answer", "Nothing to reply to yet, boss."
     return JarvisResponse(
-        heard=plan.heard or heard, action=action, say=say, compose=compose, suggest=suggest,
+        heard=plan.heard or heard, action=action, say=say, compose=compose, suggest=suggest, task=task,
         latency_ms=int((time.perf_counter() - started) * 1000),
     )

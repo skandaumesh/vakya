@@ -52,6 +52,21 @@ data class JarvisResult(
     val compose: ComposeResult?,
     /** suggest: reply options. */
     val suggest: SuggestResult?,
+    /** device: a task for the phone (alarm, call, open an app...). */
+    val task: DeviceTask?,
+)
+
+/** A phone task Jarvis heard; only the fields its [kind] needs are set. */
+data class DeviceTask(
+    val kind: String,
+    val time: String = "",
+    val seconds: Int = 0,
+    val label: String = "",
+    val app: String = "",
+    val contact: String = "",
+    val text: String = "",
+    val on: Boolean = true,
+    val target: String = "",
 )
 
 /** What's on screen when Jarvis is called: the app, and the open chat if there is one. */

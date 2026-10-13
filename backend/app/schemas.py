@@ -193,7 +193,37 @@ class ComposeResponse(ComposeOutput):
 
 # ---------- Jarvis: "Hey Jarvis" + a spoken command ----------
 
-JarvisAction = Literal["write", "suggest", "read", "answer"]
+JarvisAction = Literal["write", "suggest", "read", "answer", "device", "end"]
+
+DeviceTaskKind = Literal[
+    "none", "alarm", "timer", "open_app", "call", "message", "play", "navigate", "search",
+    "flashlight", "battery", "phone", "settings", "volume", "note_add", "notes_read", "notes_clear",
+]
+
+
+class DeviceTask(BaseModel):
+    """Something to do on the phone itself; only the fields the kind needs are filled."""
+
+    kind: DeviceTaskKind = "none"
+    time: str = Field(default="", description="alarm: 24-hour HH:MM.")
+    seconds: int = Field(default=0, description="timer: length in seconds.")
+    label: str = Field(default="", description="alarm/timer: what it's for, e.g. 'call Amma'.")
+    app: str = Field(default="", description="open_app: the app's name; message: whatsapp or sms; play: youtube, spotify or empty.")
+    contact: str = Field(default="", description="call/message: the name or number as I said it.")
+    text: str = Field(default="", description="message text, song/video to play, place, search query, or note.")
+    on: bool = Field(default=True, description="flashlight on/off; volume up (true) or down (false).")
+    target: str = Field(
+        default="",
+        description="phone: home, back, recents, notifications, quick_settings, lock, screenshot. "
+        "settings: wifi, bluetooth, internet, volume, display, battery. volume: mute or empty.",
+    )
+
+
+class JarvisTurn(BaseModel):
+    """One earlier exchange in this conversation."""
+
+    heard: str = Field(max_length=500)
+    say: str = Field(max_length=500)
 
 
 class JarvisRequest(BaseModel):
@@ -215,6 +245,8 @@ class JarvisRequest(BaseModel):
     memory: list[str] = Field(default_factory=list, max_length=30)
     language: ReplyLanguage = "auto"
     local_time: str | None = Field(default=None, max_length=60, description="The phone's time, e.g. 'Mon 13 Oct 2026, 8:30 pm'.")
+    history: list[JarvisTurn] = Field(default_factory=list, max_length=6, description="Earlier in this conversation, oldest first.")
+    notes: list[str] = Field(default_factory=list, max_length=30, description="My to-do list, kept on the phone.")
 
 
 class JarvisPlan(BaseModel):
@@ -223,6 +255,7 @@ class JarvisPlan(BaseModel):
     heard: str = Field(description="What I said, with obvious speech-to-text mistakes fixed.")
     action: JarvisAction
     intent: str = Field(default="", description="write: what to write, in my words. Else empty.")
+    task: DeviceTask = Field(default_factory=DeviceTask, description="device: what to do on the phone. Else kind none.")
     say: str = Field(description="Jarvis's spoken answer: 1-2 short sentences.")
 
 
@@ -232,4 +265,5 @@ class JarvisResponse(BaseModel):
     say: str
     compose: ComposeResponse | None = None
     suggest: SuggestResponse | None = None
+    task: DeviceTask | None = None
     latency_ms: int

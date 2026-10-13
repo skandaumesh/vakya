@@ -118,3 +118,42 @@ def test_ideas_are_announced_not_typed(fake, monkeypatch):
     fake["plan"] = JarvisPlan(heard="roast him", action="write", intent="roast him", say="Done, boss. It's in the box.")
     data = client.post("/jarvis", json={**CHAT, "text": "roast him"}).json()
     assert data["say"] == "2 ideas on screen, boss. Take your pick."
+
+
+def test_device_tasks_come_back_for_the_phone(fake):
+    from app.schemas import DeviceTask
+    fake["plan"] = JarvisPlan(heard="set an alarm for 6", action="device", say="Alarm set for six, boss.",
+                              task=DeviceTask(kind="alarm", time="06:00"))
+    data = client.post("/jarvis", json={"text": "set an alarm for 6"}).json()
+    assert data["action"] == "device" and data["task"]["kind"] == "alarm" and data["task"]["time"] == "06:00"
+
+
+def test_a_device_plan_without_a_task_is_just_an_answer(fake):
+    fake["plan"] = JarvisPlan(heard="hmm", action="device", say="Hmm, boss?")
+    data = client.post("/jarvis", json={"text": "hmm"}).json()
+    assert data["action"] == "answer" and data["task"] is None
+
+
+def test_follow_ups_see_the_conversation_and_my_list(fake):
+    fake["plan"] = JarvisPlan(heard="make it seven", action="answer", say="Done.")
+    client.post("/jarvis", json={"text": "make it seven", "notes": ["milk"],
+                                 "history": [{"heard": "set an alarm for 6", "say": "Alarm set for six, boss."}]})
+    assert '<history>\nme: "set an alarm for 6"\njarvis: "Alarm set for six, boss."\n</history>' in fake["jarvis_input"]
+    assert '<notes>\n- "milk"\n</notes>' in fake["jarvis_input"]
+
+
+def test_malformed_model_output_is_tried_again(fake, monkeypatch):
+    from app.errors import LLMError
+    calls = []
+    real = llm._parse
+
+    async def flaky(system, user_content, output_format, max_tokens, **kw):
+        calls.append(kw.get("prefer"))
+        if output_format is JarvisPlan and len(calls) == 1:
+            raise LLMError("model output did not match schema: json_validate_failed")
+        return await real(system, user_content, output_format, max_tokens, **kw)
+
+    monkeypatch.setattr(llm, "_parse", flaky)
+    fake["plan"] = JarvisPlan(heard="open instagram", action="answer", say="Opening.")
+    assert client.post("/jarvis", json={"text": "open instagram"}).json()["say"] == "Opening."
+    assert len(calls) == 2

@@ -133,7 +133,13 @@ class ReplyApi(
             memory: List<String>,
             language: String?,
             localTime: String,
+            history: List<Pair<String, String>> = emptyList(),
+            notes: List<String> = emptyList(),
         ): JSONObject = JSONObject()
+            .put("history", JSONArray(history.takeLast(6).map { (heard, say) ->
+                JSONObject().put("heard", heard.take(500)).put("say", say.take(500))
+            }))
+            .put("notes", JSONArray(notes.takeLast(30)))
             .put("audio", android.util.Base64.encodeToString(audio, android.util.Base64.NO_WRAP))
             .put("app", context.app)
             .put("in_chat", context.inChat)
@@ -158,6 +164,19 @@ class ReplyApi(
             say = j.optString("say"),
             compose = j.optJSONObject("compose")?.let(::parseCompose),
             suggest = j.optJSONObject("suggest")?.let(::parseResult),
+            task = j.optJSONObject("task")?.let {
+                DeviceTask(
+                    kind = it.optString("kind", "none"),
+                    time = it.optString("time"),
+                    seconds = it.optInt("seconds"),
+                    label = it.optString("label"),
+                    app = it.optString("app"),
+                    contact = it.optString("contact"),
+                    text = it.optString("text"),
+                    on = it.optBoolean("on", true),
+                    target = it.optString("target"),
+                )
+            },
         )
 
         fun parseCompose(j: JSONObject): ComposeResult {

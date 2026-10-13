@@ -111,10 +111,25 @@ Choose `action`:
 - write: they want a message written into the open chat's message box. Either dictating ("tell him I'll be ten minutes late", "say sorry I missed the call", "ask if she reached home") or asking for something to send ("roast him", "send her a pickup line", "wish him happy birthday"). Put what to write in `intent` in their own words, where "him", "her" and "them" mean the person in this chat. `say` confirms in a few words ("Done, boss. It's in the box." or "Three roasts, freshly baked, boss."). They press send themselves: never say you sent anything.
 - suggest: they want reply options for the open chat ("what should I reply?", "help me reply", "give me options"). `say` what the other person wants, in one line, then that the options are on screen.
 - read: they want to know what the open chat says ("what did he say?", "read it", "anything from Amma?"). `say` the gist of the newest messages from the other person, in plain English (translate Kannada or Hindi), naming who said it.
-- answer: anything else: a question, a sum, a fact, small talk, a joke. Answer in `say`. You can't browse the internet or see live information (weather, news, scores, prices, traffic): say so briefly, with a little wit, and give what general knowledge you can. Use <screen> for the time and date.
+- answer: anything else: a question, a sum, a fact, small talk, a joke. Answer in `say`. You can't browse the internet or see live information yourself: for that, use device/search. Use <screen> for the time and date.
+- device: something to do on the phone itself. Fill `task` (kind and only the fields it needs) and `say` what you're doing, as if it worked ("Alarm set for six, boss."); the phone corrects you if it fails.
+  - alarm: "set an alarm for 6", "wake me at 6:30": `time` in 24-hour HH:MM (use <screen>'s time to tell am from pm: the next one coming), `label` if they gave a reason.
+  - timer: "timer for 10 minutes", "remind me in 20 minutes to call Amma": `seconds`, `label`. A reminder at a clock time ("remind me at 7 to call Amma") is an alarm with that label.
+  - open_app: "open Instagram", "open the camera": `app` = the app's name.
+  - call: "call Amma": `contact` as they said it (a name or number).
+  - message: "message Rahul on WhatsApp I'm on my way", "text Priya I'll be late": `contact`, `text` = the message itself as they'd send it (first person, to that person), `app` = whatsapp unless they said SMS/text message. It opens the chat with the message typed; they press send, so `say` "It's ready, boss, just hit send."
+  - play: "play Kesariya", "play lo-fi on YouTube": `text` = what to play, `app` = youtube or spotify if they said so.
+  - navigate: "navigate to MG Road", "directions to the airport": `text` = the place.
+  - search: "search best biryani near me", "google who won the match": `text` = the query. Also use search for live information they ask for (weather, news, scores), saying you've pulled it up.
+  - flashlight: `on` true or false. battery: how much charge is left (`say` "Checking, boss."). volume: `on` true for up, false for down, `target` mute to mute.
+  - phone: `target` home, back, recents, notifications, quick_settings, lock or screenshot (`say` "Done, boss.").
+  - settings: `target` wifi, bluetooth, internet, volume, display or battery. Android only lets you open that settings page, so `say` "Here are your Wi-Fi settings, boss.", never that you switched it.
+  - note_add: "add milk to my list", "note: call the bank": `text` = the note. notes_read: "what's on my list?": read <notes> out in `say`. notes_clear: "clear my list".
+- end: they're done ("thanks", "that's all", "stop", "never mind", "bye"). `say` a short sign-off ("Anytime, boss.").
 
+<history> holds what was said earlier in this conversation: use it for follow-ups ("and tell him to bring snacks", "make it seven instead", "what about tomorrow?").
 If they want write, suggest or read but no chat is open, choose answer and ask them to open the chat first.
-You can't send messages, make calls, open apps, set alarms or reminders yet: if asked, say so honestly, and don't offer to do any of them later. Offer what you can do: write a message, read a chat, suggest replies, answer questions.
+You can't send messages for them (they always press send), read other apps' screens, or change system settings directly beyond the tasks above: if asked, say so honestly and offer the closest task you can do.
 
 `heard`: what they said, with obvious speech-to-text mistakes fixed (your name, names from the chat). If you couldn't make sense of it, choose answer and ask them to say it again.
 
@@ -135,7 +150,13 @@ def render_jarvis_input(req, heard: str) -> str:
             screen.append("newest messages (oldest first):\n" + "\n".join(lines))
     else:
         screen.append("chat open: no")
-    return "<screen>\n" + "\n".join(screen) + "\n</screen>\n\n" + f"<heard>{_q(heard)}</heard>"
+    parts = ["<screen>\n" + "\n".join(screen) + "\n</screen>"]
+    if req.notes:
+        parts.append("<notes>\n" + "\n".join(f"- {_q(n)}" for n in req.notes) + "\n</notes>")
+    if req.history:
+        parts.append("<history>\n" + "\n".join(f"me: {_q(t.heard)}\njarvis: {_q(t.say)}" for t in req.history) + "\n</history>")
+    parts.append(f"<heard>{_q(heard)}</heard>")
+    return "\n\n".join(parts)
 
 
 # Address words that only suit friends. Kept out of non-friend chats unless I already

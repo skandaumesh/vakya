@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.5.0.apk → Install.
+   b. Open Vakya-0.5.1.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.
@@ -68,6 +68,13 @@ Hey Jarvis (optional voice assistant)
    - Say "Hey Jarvis", then: "tell him I'll be ten minutes late", "what did
      she say?", "what should I reply?", "roast him", or ask any question.
      Jarvis writes into the open chat (you still press Send) and answers out loud.
+   - It also runs your phone: "set an alarm for 6", "remind me in 20 minutes
+     to call Amma", "open Instagram", "call Amma", "message Rahul I'm on my
+     way", "play Kesariya", "navigate to MG Road", "turn on the flashlight",
+     "take a screenshot", "add milk to my list". For calls and messages by
+     name, tap "Allow contacts" in Vakya (contacts never leave your phone).
+   - After it answers, just keep talking: no need to say "Hey Jarvis" again.
+     Say "thanks" (or stay quiet) when you're done.
    - It listens for its name on your phone only; just what you say after
      "Hey Jarvis" is sent to be understood. A notification shows while it's on,
      and it uses some battery. Untick it to turn it off.

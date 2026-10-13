@@ -64,6 +64,7 @@ class JarvisService : Service() {
 
         private const val MAX_COMMAND_CHUNKS = 125  // 10 s
         private const val NO_SPEECH_CHUNKS = 50     // 4 s and nothing said: give up
+        private const val FOLLOW_UP_CHUNKS = 70     // after an answer, 5.6 s to say something more
         private const val END_SILENCE_CHUNKS = 10   // 0.8 s of quiet after speaking: done
         private const val CHIME_CHUNKS = 2          // don't record the "listening" chime
 
@@ -93,6 +94,14 @@ class JarvisService : Service() {
     private var voice: JarvisVoice? = null
     private var mic: Thread? = null
     private var hideToken = 0
+    private var speakToken = 0
+    /** Earlier exchanges in this conversation (heard, said), for follow-ups. */
+    private val history = ArrayDeque<Pair<String, String>>()
+    /** Listening for a follow-up (no wake word needed) rather than a fresh command. */
+    private var followUp = false
+    /** The last answer ended the conversation ("thanks"), or failed. */
+    private var conversationOver = false
+    private val device by lazy { DeviceActions(this) }
 
     // The command being recorded (audio thread only, after beginCommand sets it up).
     private val command = ShortArray(MAX_COMMAND_CHUNKS * WakeWord.CHUNK)
@@ -268,16 +277,18 @@ class JarvisService : Service() {
 
     // ---------- The command ----------
 
-    private fun beginCommand() {
+    private fun beginCommand(isFollowUp: Boolean = false) {
         if (state == State.COMMAND) return
+        followUp = isFollowUp
+        if (!isFollowUp) history.clear()
         commandLength = 0
         commandChunks = 0
         silentChunks = 0
         heardSpeech = false
         skipChunks = CHIME_CHUNKS
         hideToken++
-        chime()
-        ChatReaderService.running?.jarvisHud("Listening…")
+        chime(soft = isFollowUp)
+        ChatReaderService.running?.jarvisHud(if (isFollowUp) "Listening… (or say thanks)" else "Listening…")
         state = State.COMMAND
     }
 
@@ -296,7 +307,7 @@ class JarvisService : Service() {
             silentChunks++
         }
         val done = (heardSpeech && silentChunks >= END_SILENCE_CHUNKS) ||
-            (!heardSpeech && commandChunks >= NO_SPEECH_CHUNKS) ||
+            (!heardSpeech && commandChunks >= (if (followUp) FOLLOW_UP_CHUNKS else NO_SPEECH_CHUNKS)) ||
             commandChunks >= MAX_COMMAND_CHUNKS
         if (!done) return
         state = State.BUSY
@@ -310,8 +321,10 @@ class JarvisService : Service() {
     private fun send(pcm: ShortArray, speech: Boolean) {
         val a11y = ChatReaderService.running
         if (!speech) {
-            a11y?.jarvisHudHide()
-            resume()
+            if (followUp) endConversation() else {
+                a11y?.jarvisHudHide()
+                resume()
+            }
             return
         }
         a11y?.jarvisHud("Thinking…", thinking = true)
@@ -328,6 +341,8 @@ class JarvisService : Service() {
             memory = contact?.memory?.toList().orEmpty(),
             language = contact?.language,
             localTime = SimpleDateFormat("EEE d MMM yyyy, h:mm a", Locale.ENGLISH).format(Date()),
+            history = history.toList(),
+            notes = store.notes,
         )
         val api = store.api()
         io.execute {
@@ -340,8 +355,20 @@ class JarvisService : Service() {
         val a11y = ChatReaderService.running
         result
             .onSuccess { r ->
-                Log.i(TAG, "jarvis: action=${r.action}")
-                var caption = r.say
+                Log.i(TAG, "jarvis: action=${r.action} task=${r.task?.kind}")
+                var say = r.say
+                conversationOver = r.action == "end"
+                if (r.action == "device" && r.task != null) {
+                    if (r.task.kind == "phone" && r.task.target == "screenshot") {
+                        // Out of the picture first.
+                        a11y?.jarvisHudHide()
+                        main.postDelayed({ device.run(r.task); speak(say) }, 450)
+                        history.addLast(r.heard to say)
+                        return
+                    }
+                    device.run(r.task)?.let { say = it }
+                }
+                var caption = say
                 when (r.action) {
                     "write" -> r.compose?.let { c ->
                         if (c.ideas) {
@@ -354,11 +381,14 @@ class JarvisService : Service() {
                     "suggest" -> r.suggest?.let { a11y?.jarvisShow(context, suggest = it) }
                 }
                 a11y?.jarvisHud(if (r.heard.isNotBlank()) "“${r.heard}”" else "Jarvis", caption)
-                speak(r.say)
+                history.addLast(r.heard to say)
+                while (history.size > 4) history.removeFirst()
+                speak(say)
             }
             .onFailure { e ->
                 Log.w(TAG, "jarvis: failed (${e.javaClass.simpleName})")
                 val sorry = trouble(e)
+                conversationOver = true
                 a11y?.jarvisHud("Jarvis", sorry)
                 speak(sorry)
             }
@@ -375,17 +405,31 @@ class JarvisService : Service() {
     }
 
     private fun speak(text: String) {
+        val token = ++speakToken
+        val done = { if (token == speakToken) { speakToken++; doneSpeaking() } }
         val v = voice
         if (v == null || text.isBlank()) {
-            doneSpeaking()
+            done()
             return
         }
-        v.speak(text) { main.post { doneSpeaking() } }
+        v.speak(text) { main.post(done) }
+        // If the speech engine never reports back, don't stay deaf.
+        main.postDelayed(done, 4000L + text.length * 90L)
     }
 
+    /** After Jarvis speaks: keep listening for a follow-up, unless the conversation is over. */
     private fun doneSpeaking() {
+        if (!conversationOver && mic != null) {
+            beginCommand(isFollowUp = true)
+            return
+        }
+        endConversation()
+    }
+
+    private fun endConversation() {
+        history.clear()
         val token = ++hideToken
-        main.postDelayed({ if (token == hideToken) ChatReaderService.running?.jarvisHudHide() }, 2500)
+        main.postDelayed({ if (token == hideToken) ChatReaderService.running?.jarvisHudHide() }, 2000)
         resume()
     }
 
@@ -402,10 +446,10 @@ class JarvisService : Service() {
         }
     }
 
-    private fun chime() {
+    private fun chime(soft: Boolean = false) {
         runCatching {
-            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, 55)
-            tone.startTone(ToneGenerator.TONE_PROP_ACK, 160)
+            val tone = ToneGenerator(AudioManager.STREAM_MUSIC, if (soft) 30 else 55)
+            tone.startTone(if (soft) ToneGenerator.TONE_PROP_BEEP else ToneGenerator.TONE_PROP_ACK, if (soft) 90 else 160)
             main.postDelayed({ tone.release() }, 400)
         }
         runCatching {
