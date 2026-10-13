@@ -197,7 +197,7 @@ JarvisAction = Literal["write", "suggest", "read", "answer", "device", "end"]
 
 DeviceTaskKind = Literal[
     "none", "alarm", "timer", "open_app", "call", "message", "play", "navigate", "search",
-    "flashlight", "battery", "phone", "settings", "volume", "note_add", "notes_read", "notes_clear",
+    "flashlight", "battery", "phone", "settings", "volume", "note_add", "notes_read", "notes_clear", "send",
 ]
 
 

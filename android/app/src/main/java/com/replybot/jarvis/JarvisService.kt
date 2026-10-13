@@ -40,12 +40,12 @@ import java.util.concurrent.Executors
 import kotlin.math.sqrt
 
 /**
- * "Hey Jarvis". Listens on the phone for the wake word (no audio leaves the phone until it's
+ * "Hey Friday". Listens on the phone for the wake word (no audio leaves the phone until it's
  * heard), records the command until you stop talking, sends it to the Vakya server, and does
  * what it says: writes into the open chat, shows reply options, or answers aloud.
  *
- * A foreground service with a notification ("Jarvis is listening"), started from the Vakya app
- * while "Listen for Hey Jarvis" is on. It never presses send.
+ * A foreground service with a notification ("Friday is listening"), started from the Vakya app
+ * while "Listen for Hey Friday" is on. It sends a message only after you say yes.
  */
 class JarvisService : Service() {
 
@@ -65,7 +65,7 @@ class JarvisService : Service() {
         private const val MAX_COMMAND_CHUNKS = 125  // 10 s
         private const val NO_SPEECH_CHUNKS = 50     // 4 s and nothing said: give up
         private const val FOLLOW_UP_CHUNKS = 70     // after an answer, 5.6 s to say something more
-        private const val END_SILENCE_CHUNKS = 10   // 0.8 s of quiet after speaking: done
+        private const val END_SILENCE_CHUNKS = 7    // 0.56 s of quiet after speaking: done
         private const val CHIME_CHUNKS = 2          // don't record the "listening" chime
 
         @Volatile
@@ -90,7 +90,7 @@ class JarvisService : Service() {
     @Volatile private var testing = false
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
-    private var wake: WakeWord? = null
+    private var wake: FridayWake? = null
     private var voice: JarvisVoice? = null
     private var mic: Thread? = null
     private var hideToken = 0
@@ -104,7 +104,7 @@ class JarvisService : Service() {
     private val device by lazy { DeviceActions(this) }
 
     // The command being recorded (audio thread only, after beginCommand sets it up).
-    private val command = ShortArray(MAX_COMMAND_CHUNKS * WakeWord.CHUNK)
+    private val command = ShortArray(MAX_COMMAND_CHUNKS * FridayWake.CHUNK)
     private var commandLength = 0
     private var commandChunks = 0
     private var silentChunks = 0
@@ -151,8 +151,8 @@ class JarvisService : Service() {
     private fun goForeground(): Boolean {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return false
         getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "Hey Jarvis", NotificationManager.IMPORTANCE_LOW).apply {
-                description = "Shown while Jarvis listens for \"Hey Jarvis\""
+            NotificationChannel(CHANNEL, "Hey Friday", NotificationManager.IMPORTANCE_LOW).apply {
+                description = "Shown while Friday listens for \"Hey Friday\""
                 setShowBadge(false)
             },
         )
@@ -162,8 +162,8 @@ class JarvisService : Service() {
         )
         val notification = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_jarvis)
-            .setContentTitle("Jarvis is listening")
-            .setContentText("Say \"Hey Jarvis\", then what you need")
+            .setContentTitle("Friday is listening")
+            .setContentText("Say \"Hey Friday\", then what you need")
             .setOngoing(true)
             .setContentIntent(
                 PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE),
@@ -189,9 +189,9 @@ class JarvisService : Service() {
     private fun setUp(withMic: Boolean): Boolean {
         if (wake == null) {
             wake = try {
-                WakeWord(asset("melspectrogram.onnx"), asset("embedding_model.onnx"), asset("hey_jarvis_v0.1.onnx"))
+                FridayWake(assets)
             } catch (e: Exception) {
-                Log.e(TAG, "jarvis: wake word models failed to load", e)
+                Log.e(TAG, "friday: wake word model failed to load", e)
                 return false
             }
             voice = JarvisVoice(this)
@@ -204,17 +204,15 @@ class JarvisService : Service() {
         return true
     }
 
-    private fun asset(name: String) = assets.open("jarvis/$name").use { it.readBytes() }
-
     // ---------- Listening ----------
 
     private fun listen() {
-        val rate = WakeWord.SAMPLE_RATE
+        val rate = FridayWake.SAMPLE_RATE
         val minBuffer = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
         val rec = try {
             AudioRecord(
                 MediaRecorder.AudioSource.VOICE_RECOGNITION, rate, AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, WakeWord.CHUNK * 8),
+                AudioFormat.ENCODING_PCM_16BIT, maxOf(minBuffer, FridayWake.CHUNK * 8),
             )
         } catch (e: SecurityException) {
             null
@@ -225,7 +223,7 @@ class JarvisService : Service() {
             main.post { stopSelf() }
             return
         }
-        val chunk = ShortArray(WakeWord.CHUNK)
+        val chunk = ShortArray(FridayWake.CHUNK)
         rec.startRecording()
         Log.i(TAG, "jarvis: listening")
         try {
@@ -253,10 +251,10 @@ class JarvisService : Service() {
         val level = rms(chunk)
         when (state) {
             State.WAKE -> {
-                val score = wake?.process(chunk) ?: return
-                if (score < 0.1f) noise = noise * 0.97 + level * 0.03
-                if (score >= WakeWord.THRESHOLD) {
-                    Log.i(TAG, "jarvis: wake word (score %.2f)".format(score))
+                val heard = wake?.process(chunk) ?: return
+                if (!heard) noise = noise * 0.97 + level * 0.03
+                if (heard) {
+                    Log.i(TAG, "friday: wake word")
                     state = State.BUSY
                     main.post { beginCommand() }
                 }
@@ -313,7 +311,7 @@ class JarvisService : Service() {
         state = State.BUSY
         val speech = heardSpeech
         // Drop most of the trailing quiet; keep a little so the last word isn't clipped.
-        val pcm = command.copyOf(commandLength - maxOf(0, silentChunks - 3) * WakeWord.CHUNK)
+        val pcm = command.copyOf(commandLength - maxOf(0, silentChunks - 3) * FridayWake.CHUNK)
         Log.i(TAG, "jarvis: command %.1fs speech=%s".format(pcm.size / 16000.0, speech))
         main.post { send(pcm, speech) }
     }
@@ -380,7 +378,7 @@ class JarvisService : Service() {
                     }
                     "suggest" -> r.suggest?.let { a11y?.jarvisShow(context, suggest = it) }
                 }
-                a11y?.jarvisHud(if (r.heard.isNotBlank()) "“${r.heard}”" else "Jarvis", caption)
+                a11y?.jarvisHud(if (r.heard.isNotBlank()) "“${r.heard}”" else "Friday", caption)
                 history.addLast(r.heard to say)
                 while (history.size > 4) history.removeFirst()
                 speak(say)
@@ -389,7 +387,7 @@ class JarvisService : Service() {
                 Log.w(TAG, "jarvis: failed (${e.javaClass.simpleName})")
                 val sorry = trouble(e)
                 conversationOver = true
-                a11y?.jarvisHud("Jarvis", sorry)
+                a11y?.jarvisHud("Friday", sorry)
                 speak(sorry)
             }
     }
@@ -433,9 +431,9 @@ class JarvisService : Service() {
         resume()
     }
 
-    /** Back to waiting for "Hey Jarvis", with fresh audio so the last words can't fire again. */
+    /** Back to waiting for "Hey Friday", with fresh audio so the last words can't fire again. */
     private fun resume() {
-        // A self-test without "Listen for Hey Jarvis" on: done, so don't stay in the notifications.
+        // A self-test without "Listen for Hey Friday" on: done, so don't stay in the notifications.
         if (mic == null && !Store.get(this).jarvisOn) {
             stopSelf()
             return
@@ -475,14 +473,14 @@ class JarvisService : Service() {
             val pcm = Wav.decode(file.readBytes())
             Log.i(TAG, "jarvis test: %.1fs from %s".format(pcm.size / 16000.0, file.name))
             var i = 0
-            while (i + WakeWord.CHUNK <= pcm.size && !stopping) {
-                onChunk(pcm.copyOfRange(i, i + WakeWord.CHUNK))
-                i += WakeWord.CHUNK
+            while (i + FridayWake.CHUNK <= pcm.size && !stopping) {
+                onChunk(pcm.copyOfRange(i, i + FridayWake.CHUNK))
+                i += FridayWake.CHUNK
                 Thread.sleep(80)
             }
             repeat(30) {  // quiet after the clip, so the command ends
                 if (!stopping) {
-                    onChunk(ShortArray(WakeWord.CHUNK))
+                    onChunk(ShortArray(FridayWake.CHUNK))
                     Thread.sleep(80)
                 }
             }

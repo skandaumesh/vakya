@@ -73,7 +73,7 @@ class Store private constructor(private val file: File, private val prefs: Share
 
     fun clearNotes() = prefs.edit().remove("jarvis_notes").apply()
 
-    /** "Hey Jarvis" is switched on (the listening service runs while this is true). */
+    /** "Hey Friday" is switched on (the listening service runs while this is true). */
     var jarvisOn: Boolean
         get() = prefs.getBoolean("jarvis_on", false)
         set(v) = prefs.edit().putBoolean("jarvis_on", v).apply()

@@ -12,8 +12,8 @@ import android.view.animation.LinearInterpolator
 import kotlin.math.min
 
 /**
- * Jarvis's glowing ring: three arcs turning around a bright core that pulses with your voice.
- * Spins faster while Jarvis is thinking.
+ * Friday's glowing ring: three arcs turning around a bright core that pulses with your voice.
+ * Spins faster while Friday is thinking.
  */
 class ArcReactorView(context: Context) : View(context) {
 

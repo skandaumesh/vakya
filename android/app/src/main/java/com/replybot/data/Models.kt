@@ -69,7 +69,7 @@ data class DeviceTask(
     val target: String = "",
 )
 
-/** What's on screen when Jarvis is called: the app, and the open chat if there is one. */
+/** What's on screen when Friday is called: the app, and the open chat if there is one. */
 data class JarvisContext(
     val app: String,
     val chatTitle: String? = null,

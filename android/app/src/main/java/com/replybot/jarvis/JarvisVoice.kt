@@ -9,8 +9,8 @@ import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 
 /**
- * Jarvis's voice: the phone's own text-to-speech (offline, free), in Indian English when the
- * phone has it, with a lower, calmer male voice where one exists.
+ * Friday's voice: the phone's own text-to-speech (offline, free), in Indian English when the
+ * phone has it, with a woman's voice where one exists.
  */
 class JarvisVoice(context: Context) {
 
@@ -45,13 +45,15 @@ class JarvisVoice(context: Context) {
         val india = Locale("en", "IN")
         tts.language = if (tts.isLanguageAvailable(india) >= TextToSpeech.LANG_AVAILABLE) india else Locale.UK
         val country = tts.voice?.locale?.country
-        // Google's offline Indian-English male voices are "en-in-x-ene" and "en-in-x-end".
-        tts.voices
+        // Google's offline Indian-English women's voices are "en-in-x-ahp" and "en-in-x-cxx"
+        // (other engines name theirs "female").
+        val voices = tts.voices
             ?.filter { it.locale.language == "en" && it.locale.country == country && !it.isNetworkConnectionRequired }
-            ?.firstOrNull { v -> listOf("-ene", "-end", "male").any { v.name.contains(it, ignoreCase = true) } }
+            .orEmpty()
+        voices.firstOrNull { v -> listOf("-ahp", "-cxx", "female").any { v.name.contains(it, ignoreCase = true) } }
             ?.let { tts.voice = it }
-        tts.setPitch(0.92f)
-        tts.setSpeechRate(1.0f)
+        tts.setPitch(1.05f)
+        tts.setSpeechRate(1.08f)
     }
 
     /** Say [text], then call [done] (on a background thread). */

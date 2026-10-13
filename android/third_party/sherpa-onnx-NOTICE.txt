@@ -1,0 +1,7 @@
+Hey Friday wake word: sherpa-onnx (https://github.com/k2-fsa/sherpa-onnx), Apache License 2.0.
+
+- android/app/libs/sherpa-onnx-static-link-onnxruntime-1.13.8.aar is sherpa-onnx's Android release
+  (downloaded by the build if missing). It includes ONNX Runtime (MIT License).
+- android/app/src/main/assets/friday/ is the keyword-spotting model
+  sherpa-onnx-kws-zipformer-gigaspeech-3.3M-2024-01-01 (Apache License 2.0), int8 version, with
+  keywords.txt listing "HEY FRIDAY" in the model's word pieces.

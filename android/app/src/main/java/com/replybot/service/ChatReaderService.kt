@@ -361,7 +361,34 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         return ok
     }
 
-    /** Open the panel on the current chat with Jarvis's reply options or ideas. */
+    /**
+     * Tap the send button of the chat on screen (WhatsApp's "send", or a button labelled Send).
+     * Only called after the user said yes to sending a message Friday prepared.
+     */
+    fun jarvisSend(): Boolean {
+        val root = rootInActiveWindow ?: return false
+        val pkg = root.packageName?.toString() ?: return false
+        val byId = root.findAccessibilityNodeInfosByViewId("$pkg:id/send").firstOrNull { it.isVisibleToUser }
+        val button = byId ?: findSendButton(root) ?: return false
+        var node: AccessibilityNodeInfo? = button
+        while (node != null && !node.isClickable) node = node.parent
+        return node?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+    }
+
+    private fun findSendButton(root: AccessibilityNodeInfo): AccessibilityNodeInfo? {
+        val stack = arrayListOf(root)
+        var seen = 0
+        while (stack.isNotEmpty() && seen < 800) {
+            val n = stack.removeAt(stack.lastIndex)
+            seen++
+            val label = n.contentDescription?.toString()?.trim().orEmpty()
+            if (n.isVisibleToUser && Regex("^send( message| sms| mms)?$", RegexOption.IGNORE_CASE).matches(label)) return n
+            for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.add(it) }
+        }
+        return null
+    }
+
+    /** Open the panel on the current chat with Friday's reply options or ideas. */
     fun jarvisShow(context: JarvisContext, suggest: SuggestResult? = null, compose: ComposeResult? = null) {
         val (pkg, box) = chatBox() ?: return
         val root = rootInActiveWindow ?: return

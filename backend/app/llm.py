@@ -25,6 +25,8 @@ from .prompts import (
     wants_english,
 )
 from .providers import active_provider
+from .providers.openai_compat import no_waiting
+from .quick import quick_plan
 from .schemas import (
     COMPOSE_STYLES,
     ComposeIdea,
@@ -328,7 +330,7 @@ async def build_style_card(my_messages: list[str]) -> StyleCard:
 # ---------- Jarvis ----------
 
 # The wake word itself often ends up at the start of the transcript.
-_WAKE_WORD = re.compile(r"^\s*(?:hey|hi|ok|okay)?[\s,]*j[ae]rv[ie]s[\s,.!?]*", re.IGNORECASE)
+_WAKE_WORD = re.compile(r"^\s*(?:hey|hi|ok|okay)?[\s,]*(?:j[ae]rv[ie]s|friday)[\s,.!?]*", re.IGNORECASE)
 
 
 async def transcribe(audio: bytes) -> str:
@@ -347,15 +349,22 @@ async def jarvis(req: JarvisRequest, audio: bytes | None) -> JarvisResponse:
         return JarvisResponse(heard="", action="answer", say="I'm listening, boss. Say that again?",
                               latency_ms=int((time.perf_counter() - started) * 1000))
 
-    plan: JarvisPlan
-    jarvis_input = render_jarvis_input(req, heard)
-    try:
-        plan, _ = await _parse(JARVIS_SYSTEM, jarvis_input, JarvisPlan, max_tokens=800)
-    except LLMError as e:
-        if isinstance(e, (RateLimited, ProviderTimeout, ProviderUnavailable, LLMRefusal)):
-            raise
-        # Malformed output (Groq's json_validate_failed): one more go, on the other provider if there is one.
-        plan, _ = await _parse(JARVIS_SYSTEM, jarvis_input, JarvisPlan, max_tokens=800, prefer=config.KANGLISH_PROVIDER)
+    with no_waiting():
+        return await _jarvis(req, heard, started)
+
+
+async def _jarvis(req: JarvisRequest, heard: str, started: float) -> JarvisResponse:
+    # Simple commands ("set an alarm for 6", "open Instagram") skip the model: instant, and free.
+    plan = quick_plan(heard, req.local_time, req.history)
+    if plan is None:
+        jarvis_input = render_jarvis_input(req, heard)
+        try:
+            plan, _ = await _parse(JARVIS_SYSTEM, jarvis_input, JarvisPlan, max_tokens=800)
+        except LLMError as e:
+            if isinstance(e, (RateLimited, ProviderTimeout, ProviderUnavailable, LLMRefusal)):
+                raise
+            # Malformed output (Groq's json_validate_failed): one more go, on the other provider if there is one.
+            plan, _ = await _parse(JARVIS_SYSTEM, jarvis_input, JarvisPlan, max_tokens=800, prefer=config.KANGLISH_PROVIDER)
     say = strip_slurs(plan.say.strip()) or "Done, boss."
     action = plan.action
     if action in ("write", "suggest", "read") and not req.in_chat:

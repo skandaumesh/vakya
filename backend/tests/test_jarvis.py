@@ -104,7 +104,7 @@ def test_jarvis_input_shows_the_screen():
     out = render_jarvis_input(req, "what did he say?")
     assert "chat open: yes, with Rahul" in out and 'them: "where are you? movie starts at 6"' in out
     assert out.endswith('<heard>"what did he say?"</heard>')
-    assert "boss" in JARVIS_SYSTEM and "never say you sent anything" in JARVIS_SYSTEM
+    assert "boss" in JARVIS_SYSTEM and "Never send without that yes" in JARVIS_SYSTEM
 
 
 def test_ideas_are_announced_not_typed(fake, monkeypatch):
@@ -154,6 +154,13 @@ def test_malformed_model_output_is_tried_again(fake, monkeypatch):
         return await real(system, user_content, output_format, max_tokens, **kw)
 
     monkeypatch.setattr(llm, "_parse", flaky)
-    fake["plan"] = JarvisPlan(heard="open instagram", action="answer", say="Opening.")
-    assert client.post("/jarvis", json={"text": "open instagram"}).json()["say"] == "Opening."
+    fake["plan"] = JarvisPlan(heard="what's the capital of France", action="answer", say="Paris, boss.")
+    assert client.post("/jarvis", json={"text": "what's the capital of France"}).json()["say"] == "Paris, boss."
     assert len(calls) == 2
+
+
+
+def test_simple_commands_skip_the_model(fake):
+    data = client.post("/jarvis", json={"text": "Hey Friday, set an alarm for 6", "local_time": "Tue 14 Oct 2026, 9:40 pm"}).json()
+    assert data["task"]["kind"] == "alarm" and data["task"]["time"] == "06:00"
+    assert fake["calls"] == []  # no model call at all

@@ -1,3 +1,4 @@
+import java.net.URI
 import java.util.Properties
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
@@ -24,12 +25,12 @@ android {
         applicationId = "com.onezerolabs.vakya"
         minSdk = 26
         targetSdk = 35
-        versionCode = 7
-        versionName = "0.5.1"
+        versionCode = 8
+        versionName = "0.6.0"
         // Debug builds talk to the laptop over USB (adb reverse); no key needed locally.
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"http://localhost:8000\"")
         buildConfigField("String", "APP_KEY", "\"\"")
-        // ONNX Runtime ships native code per CPU type; real phones are ARM. Keeps the APK small.
+        // sherpa-onnx ships native code per CPU type; real phones are ARM. Keeps the APK small.
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -39,7 +40,7 @@ android {
         buildConfig = true
     }
 
-    // Compress native code (ONNX Runtime for "Hey Jarvis") inside the APK: a much smaller file to
+    // Compress native code (sherpa-onnx for "Hey Friday") inside the APK: a much smaller file to
     // share, unpacked once on install.
     packaging {
         jniLibs {
@@ -92,18 +93,20 @@ kotlin {
     }
 }
 
-dependencies {
-    // "Hey Jarvis": openWakeWord's models (assets/jarvis) run on the phone with ONNX Runtime.
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
-
-    testImplementation("junit:junit:4.13.2")
-    // Unit tests run the same models with the desktop build of ONNX Runtime, and real org.json.
-    // 1.18: later desktop builds crash with the older Visual C++ runtime that Android Studio's Java bundles.
-    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.18.0")
-    testImplementation("org.json:json:20240303")
+// "Hey Friday": sherpa-onnx's keyword spotter (Android release, ONNX Runtime linked in). It's
+// 39 MB, so it isn't in git: the first build downloads it into app/libs.
+val sherpaVersion = "1.13.8"
+val sherpaAar = file("libs/sherpa-onnx-static-link-onnxruntime-$sherpaVersion.aar")
+if (!sherpaAar.exists()) {
+    sherpaAar.parentFile.mkdirs()
+    val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/v$sherpaVersion/${sherpaAar.name}"
+    logger.lifecycle("Downloading $url")
+    URI(url).toURL().openStream().use { input -> sherpaAar.outputStream().use { output -> input.copyTo(output) } }
 }
 
-// The Android build of ONNX Runtime can't load on the desktop JVM that runs unit tests.
-configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
-    exclude(group = "com.microsoft.onnxruntime", module = "onnxruntime-android")
+dependencies {
+    implementation(files(sherpaAar))
+
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("org.json:json:20240303")
 }

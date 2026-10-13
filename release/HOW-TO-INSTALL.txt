@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.5.1.apk → Install.
+   b. Open Vakya-0.6.0.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.
@@ -63,20 +63,21 @@ Is it private?
    - If your message is the last one in the chat, Vakya suggests follow-ups
      (a nudge or an update) instead of replies.
 
-Hey Jarvis (optional voice assistant)
-   - In Vakya, tick "Listen for "Hey Jarvis"" and allow the microphone.
-   - Say "Hey Jarvis", then: "tell him I'll be ten minutes late", "what did
+Hey Friday (optional voice assistant)
+   - In Vakya, tick "Listen for "Hey Friday"" and allow the microphone.
+   - Say "Hey Friday", then: "tell him I'll be ten minutes late", "what did
      she say?", "what should I reply?", "roast him", or ask any question.
-     Jarvis writes into the open chat (you still press Send) and answers out loud.
+     Friday writes into the open chat and answers out loud. She only sends a
+     message after asking "Shall I send it?" and hearing you say "yes".
    - It also runs your phone: "set an alarm for 6", "remind me in 20 minutes
      to call Amma", "open Instagram", "call Amma", "message Rahul I'm on my
      way", "play Kesariya", "navigate to MG Road", "turn on the flashlight",
      "take a screenshot", "add milk to my list". For calls and messages by
      name, tap "Allow contacts" in Vakya (contacts never leave your phone).
-   - After it answers, just keep talking: no need to say "Hey Jarvis" again.
+   - After she answers, just keep talking: no need to say "Hey Friday" again.
      Say "thanks" (or stay quiet) when you're done.
-   - It listens for its name on your phone only; just what you say after
-     "Hey Jarvis" is sent to be understood. A notification shows while it's on,
+   - She listens for her name on your phone only; just what you say after
+     "Hey Friday" is sent to be understood. A notification shows while it's on,
      and it uses some battery. Untick it to turn it off.
 
 4. Make it sound like YOU (optional, recommended)

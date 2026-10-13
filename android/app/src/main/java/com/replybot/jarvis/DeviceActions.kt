@@ -51,6 +51,7 @@ class DeviceActions(private val context: Context) {
             "volume" -> volume(task)
             "note_add" -> { store.addNote(task.text); null }
             "notes_clear" -> { store.clearNotes(); null }
+            "send" -> if (ChatReaderService.running?.jarvisSend() == true) null else "I couldn't find the send button, boss. Tap it for me?"
             else -> null
         }
     } catch (e: SecurityException) {
@@ -172,7 +173,7 @@ class DeviceActions(private val context: Context) {
         val p = person(task.contact) ?: return noContact(task.contact)
         if (task.app.equals("sms", ignoreCase = true)) {
             val sms = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(p.number))).putExtra("sms_body", task.text)
-            return if (launch(sms)) "Your message to ${p.name} is ready, boss. Just hit send." else "I couldn't open Messages, boss."
+            return if (launch(sms)) "Your message to ${p.name} is ready, boss. Shall I send it?" else "I couldn't open Messages, boss."
         }
         // WhatsApp wants the number with its country code and no "+": Indian numbers by default.
         var number = p.number.filter { it.isDigit() }
@@ -182,7 +183,7 @@ class DeviceActions(private val context: Context) {
         val opened = listOf("com.whatsapp", "com.whatsapp.w4b", null).any { pkg ->
             launch(Intent(Intent.ACTION_VIEW, url).also { if (pkg != null) it.setPackage(pkg) })
         }
-        return if (opened) "Your message to ${p.name} is ready, boss. Just hit send." else "I couldn't open WhatsApp, boss."
+        return if (opened) "Your message to ${p.name} is ready, boss. Shall I send it?" else "I couldn't open WhatsApp, boss."
     }
 
     // ---------- Media, maps, search ----------
@@ -190,14 +191,19 @@ class DeviceActions(private val context: Context) {
     private fun play(task: DeviceTask): String? {
         val q = task.text.ifBlank { "music" }
         val youtube = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(q)))
+        // "Play from search" makes Spotify / YouTube Music start playing the best match (it's what
+        // Google Assistant uses); a plain search link would only open the search screen.
+        fun playIn(pkg: String?) = launch(
+            Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
+                .putExtra(SearchManager.QUERY, q)
+                .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
+                .also { if (pkg != null) it.setPackage(pkg) },
+        )
         val ok = when (task.app.lowercase()) {
-            "spotify" -> launch(Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:" + Uri.encode(q))))
+            "spotify" -> playIn(SPOTIFY) || launch(Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:" + Uri.encode(q))))
+            "youtube music" -> playIn(YT_MUSIC) || launch(youtube)
             "youtube" -> launch(Intent(youtube).setPackage("com.google.android.youtube")) || launch(youtube)
-            else -> launch(
-                Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
-                    .putExtra(SearchManager.QUERY, q)
-                    .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*"),
-            ) || launch(youtube)
+            else -> playIn(SPOTIFY) || playIn(YT_MUSIC) || playIn(null) || launch(youtube)
         }
         return if (ok) null else "I couldn't find a music app for that, boss."
     }
@@ -290,5 +296,7 @@ class DeviceActions(private val context: Context) {
 
     private companion object {
         const val TAG = "Vakya"
+        const val SPOTIFY = "com.spotify.music"
+        const val YT_MUSIC = "com.google.android.apps.youtube.music"
     }
 }

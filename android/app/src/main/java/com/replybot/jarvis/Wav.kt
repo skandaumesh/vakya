@@ -6,7 +6,7 @@ import java.nio.ByteOrder
 /** 16-bit mono PCM to and from WAV files (what the speech-to-text service takes). */
 object Wav {
 
-    fun encode(pcm: ShortArray, sampleRate: Int = WakeWord.SAMPLE_RATE): ByteArray {
+    fun encode(pcm: ShortArray, sampleRate: Int = FridayWake.SAMPLE_RATE): ByteArray {
         val data = pcm.size * 2
         return ByteBuffer.allocate(44 + data).order(ByteOrder.LITTLE_ENDIAN).apply {
             put("RIFF".toByteArray()); putInt(36 + data); put("WAVE".toByteArray())

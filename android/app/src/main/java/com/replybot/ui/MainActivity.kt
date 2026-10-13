@@ -163,34 +163,34 @@ class MainActivity : Activity() {
         }
         col.addView(card1)
 
-        // Hey Jarvis: the voice assistant.
+        // Hey Friday: the voice assistant (named Jarvis in the code).
         val jarvisCard = glassCard().apply {
-            addView(cardHeading("Hey Jarvis", "VOICE"))
+            addView(cardHeading("Hey Friday", "VOICE"))
             addView(text(
-                "Say \"Hey Jarvis\", then what you need. In a chat: \"tell him I'll be ten minutes late\", " +
+                "Say \"Hey Friday\", then what you need. In a chat: \"tell him I'll be ten minutes late\", " +
                     "\"what did she say?\", \"what should I reply?\", \"roast him\". Anywhere: \"set an alarm for 6\", " +
                     "\"remind me in 20 minutes to call Amma\", \"open Instagram\", \"call Amma\", " +
                     "\"message Rahul I'm on my way\", \"play Kesariya\", \"turn on the flashlight\", " +
                     "\"add milk to my list\", or ask anything. After it answers, just keep talking; say \"thanks\" when you're done. " +
-                    "Jarvis never sends a message for you.",
+                    "Friday only sends a message after asking you and hearing \"yes\".",
                 14f,
             ))
-            jarvisToggle = glassCheckBox("Listen for \"Hey Jarvis\"", store.jarvisOn) { checked ->
+            jarvisToggle = glassCheckBox("Listen for \"Hey Friday\"", store.jarvisOn) { checked ->
                 if (checked) turnOnJarvis() else turnOffJarvis()
             }
             addView(jarvisToggle)
             addView(glassButton("Allow contacts (for \"call Amma\", \"message Rahul\")", primary = false) {
                 requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), REQUEST_CONTACTS)
             })
-            addView(glassButton("Talk to Jarvis now", primary = false) {
+            addView(glassButton("Talk to Friday now", primary = false) {
                 if (micAllowed()) JarvisService.start(this@MainActivity, JarvisService.ACTION_TALK)
                 else askForMic(talkAfter = true)
             })
             addView(text(
-                "Listening for \"Hey Jarvis\" happens on this phone: nothing is sent until you say it. " +
+                "Listening for \"Hey Friday\" happens on this phone: nothing is sent until you say it. " +
                     "Then the next few seconds go to Groq to turn into text, and on to the Vakya server. " +
-                    "A notification shows while Jarvis listens, and it uses some battery. " +
-                    "Wake word by openWakeWord (free for personal, non-commercial use).",
+                    "A notification shows while Friday listens, and it uses some battery. " +
+                    "Wake word by sherpa-onnx.",
                 12f, muted = true,
             ))
         }
@@ -215,7 +215,7 @@ class MainActivity : Activity() {
                     "Kannada-English chats and when Groq is busy. Gemini is Google's free tier, so Google may use " +
                     "what it receives to improve its products, and people at Google may review it. Add your own " +
                     "Groq key below and your chats never go to Google.\n\n" +
-                    "• Hey Jarvis (if you switch it on) listens for its name on this phone only. What you say " +
+                    "• Hey Friday (if you switch it on) listens for her name on this phone only. What you say " +
                     "after it goes to Groq to become text, then to the Vakya server, and isn't kept. " +
                     "For calls and messages it looks names up in your contacts on this phone; contacts are never sent anywhere.\n\n" +
                     "• Don't use Vakya on chats with OTPs, passwords or bank details.",
@@ -479,7 +479,7 @@ class MainActivity : Activity() {
         }
         store.jarvisOn = true
         JarvisService.start(this)
-        toast("Jarvis is listening. Say \"Hey Jarvis\".")
+        toast("Friday is listening. Say \"Hey Friday\".")
     }
 
     private fun turnOffJarvis() {
@@ -493,7 +493,7 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode == REQUEST_CONTACTS) {
             val ok = checkSelfPermission(Manifest.permission.READ_CONTACTS) == PackageManager.PERMISSION_GRANTED
-            toast(if (ok) "Jarvis can call and message your contacts now." else "Without contacts, Jarvis can only call numbers you say.")
+            toast(if (ok) "Friday can call and message your contacts now." else "Without contacts, Friday can only call numbers you say.")
             return
         }
         if (requestCode != REQUEST_MIC) return
@@ -501,7 +501,7 @@ class MainActivity : Activity() {
             if (talkAfterPermission) JarvisService.start(this, JarvisService.ACTION_TALK) else turnOnJarvis()
         } else {
             jarvisToggle.isChecked = false
-            toast("Jarvis needs the microphone to hear you.")
+            toast("Friday needs the microphone to hear you.")
         }
     }
 

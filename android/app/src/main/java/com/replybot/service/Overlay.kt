@@ -239,14 +239,14 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     // ---------- Jarvis ----------
 
     /**
-     * Jarvis's glowing ring at the top of the screen with what it's doing ([state]) and says
+     * Friday's glowing ring at the top of the screen with what it's doing ([state]) and says
      * ([caption]). It never takes touches, so the app underneath stays usable.
      */
     fun showJarvis(state: String, caption: String?, thinking: Boolean = false) {
         if (jarvis == null) {
             val ring = ArcReactorView(ctx)
             val title = TextView(ctx).apply {
-                text = "J A R V I S"
+                text = "F R I D A Y"
                 textSize = 11f
                 typeface = Typeface.DEFAULT_BOLD
                 setTextColor(0xFF5CE1FF.toInt())

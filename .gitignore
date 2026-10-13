@@ -28,6 +28,7 @@ android/keystore/
 # Desktop extension: generated config (app key) and release zips
 desktop/extension/config.js
 release/*.zip
+android/app/libs/*.aar
 
 # Unzipped extension (holds config.js with the app key)
 release/Vakya-Desktop*/

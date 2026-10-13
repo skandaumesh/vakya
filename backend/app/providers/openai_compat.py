@@ -6,6 +6,8 @@ import json
 import logging
 import re
 import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 
 import openai
 from pydantic import BaseModel, ValidationError
@@ -20,6 +22,19 @@ _BAD_OUTPUT_CODES = {"json_validate_failed", "output_parse_failed", "tool_use_fa
 
 # Longest we wait for a per-minute limit to clear before giving up (the app waits 30 s).
 MAX_WAIT_S = 12
+
+# A voice command shouldn't sit out a per-minute limit: fail over to the next provider at once.
+_max_wait: ContextVar[float | None] = ContextVar("max_wait", default=None)
+
+
+@contextmanager
+def no_waiting():
+    """Inside this block, a rate-limited model is skipped instead of waited for."""
+    token = _max_wait.set(0)
+    try:
+        yield
+    finally:
+        _max_wait.reset(token)
 
 
 def _seconds(duration: str) -> float:
@@ -142,7 +157,8 @@ class OpenAICompatProvider:
             # Every model is busy. If one frees up within a few seconds (a per-minute
             # limit), waiting beats showing an error; daily limits are hours away.
             wait = min(self._cooldown_until.get(m, 0) for m in self.models) - time.monotonic()
-            if wait > self.max_wait_s:
+            limit = _max_wait.get()
+            if wait > (self.max_wait_s if limit is None else limit):
                 break
             await asyncio.sleep(max(wait, 0) + 0.3)
         raise limited or RateLimited(f"{self.name} free limit reached on all models, try again soon")
