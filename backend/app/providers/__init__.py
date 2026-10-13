@@ -19,6 +19,8 @@ PRESETS = {
         "model_extra": {"qwen/qwen3.8-27b": {"reasoning_effort": "none"}},
         # Looks at photos and stickers; also free, with its own allowance.
         "vision_model": "qwen/qwen3.8-27b",
+        # Turns "Hey Jarvis" voice commands into text (free, with its own allowance).
+        "stt_model": "whisper-large-v3-turbo",
         "json_mode": "schema",
         "max_tokens_param": "max_completion_tokens",
         # gpt-oss thinks before answering; keep it short so replies stay fast.
@@ -110,6 +112,7 @@ def _build(name: str, primary: bool):
         fallback_models=fallbacks,
         model_extra=preset.get("model_extra", {}),
         vision_model=override(config.VISION_MODEL) or preset.get("vision_model"),
+        stt_model=preset.get("stt_model"),
     )
 
 
@@ -198,5 +201,6 @@ def user_groq_provider(api_key: str):
             fallback_models=preset["fallback_models"],
             model_extra=preset.get("model_extra", {}),
             vision_model=preset.get("vision_model"),
+            stt_model=preset.get("stt_model"),
         )
     return _user_providers[fingerprint]

@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import binascii
 import hmac
 import logging
 from contextlib import asynccontextmanager, contextmanager
@@ -11,7 +13,16 @@ from fastapi.staticfiles import StaticFiles
 from . import config, llm, phone_link, providers, usage
 from .errors import DailyLimitReached
 from .prompts import clean_draft
-from .schemas import ComposeRequest, ComposeResponse, StyleCard, StyleCardRequest, SuggestRequest, SuggestResponse
+from .schemas import (
+    ComposeRequest,
+    ComposeResponse,
+    JarvisRequest,
+    JarvisResponse,
+    StyleCard,
+    StyleCardRequest,
+    SuggestRequest,
+    SuggestResponse,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 log = logging.getLogger("vakya")
@@ -29,7 +40,7 @@ async def lifespan(_: FastAPI):
 # In production the interactive API docs (/docs, /redoc, /openapi.json) are hidden:
 # no need to show strangers how to call the server.
 _docs = {} if config.SHOW_DOCS else {"docs_url": None, "redoc_url": None, "openapi_url": None}
-app = FastAPI(title="Vakya", version="0.4.2", lifespan=lifespan, **_docs)
+app = FastAPI(title="Vakya", version="0.5.0", lifespan=lifespan, **_docs)
 
 
 def require_app_key(x_vakya_key: str | None = Header(default=None)) -> None:
@@ -120,6 +131,29 @@ async def compose(
     )
     with _ai_access(request, x_groq_key, x_vakya_device):
         return await llm.compose_message(req)
+
+
+@app.post("/jarvis", response_model=JarvisResponse, dependencies=[Depends(require_app_key)])
+async def jarvis(
+    req: JarvisRequest,
+    request: Request,
+    x_groq_key: str | None = Header(default=None),
+    x_vakya_device: str | None = Header(default=None),
+):
+    """'Hey Jarvis' + a spoken command: speech to text, then write / suggest / read / answer."""
+    audio = None
+    if req.audio:
+        try:
+            audio = base64.b64decode(req.audio, validate=True)
+        except (binascii.Error, ValueError):
+            raise HTTPException(status_code=422, detail="audio must be base64")
+    elif not (req.text or "").strip():
+        raise HTTPException(status_code=422, detail="send audio or text")
+    # Shape only: never what was said.
+    log.info("jarvis app=%s in_chat=%s messages=%d audio_bytes=%d text=%s",
+             req.app, req.in_chat, len(req.messages), len(audio or b""), req.text is not None)
+    with _ai_access(request, x_groq_key, x_vakya_device):
+        return await llm.jarvis(req, audio)
 
 
 @app.post("/style-card", response_model=StyleCard, dependencies=[Depends(require_app_key)])

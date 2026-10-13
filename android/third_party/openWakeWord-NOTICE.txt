@@ -1,0 +1,11 @@
+Hey Jarvis wake word: openWakeWord (https://github.com/dscripka/openWakeWord)
+
+The files in android/app/src/main/assets/jarvis/ (melspectrogram.onnx, embedding_model.onnx,
+hey_jarvis_v0.1.onnx) are openWakeWord's models, version 0.5.1 release assets.
+
+- openWakeWord's code is licensed under the Apache License 2.0. Vakya doesn't include it;
+  com.replybot.jarvis.WakeWord is a Kotlin re-implementation of its feature pipeline.
+- The pre-trained models are licensed under Creative Commons Attribution-NonCommercial-ShareAlike
+  4.0 International (CC BY-NC-SA 4.0): https://creativecommons.org/licenses/by-nc-sa/4.0/
+  Free for personal, non-commercial use, with attribution. A commercial version of Vakya needs a
+  differently licensed wake-word model (for example one trained with openWakeWord on your own data).

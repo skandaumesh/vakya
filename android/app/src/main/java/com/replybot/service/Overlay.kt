@@ -20,6 +20,7 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.replybot.R
+import com.replybot.jarvis.ArcReactorView
 import com.replybot.data.ComposeResult
 import com.replybot.data.LANGUAGES
 import com.replybot.data.STYLES
@@ -70,6 +71,11 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     /** Text on an accent-filled pill. */
     private val onAccent get() = theme.onAccent
     private val serif by lazy { ctx.resources.getFont(R.font.instrument_serif) }
+
+    private var jarvis: LinearLayout? = null
+    private var jarvisRing: ArcReactorView? = null
+    private var jarvisState: TextView? = null
+    private var jarvisCaption: TextView? = null
 
     private var bubble: View? = null
     private var bubbleParams: WindowManager.LayoutParams? = null
@@ -230,6 +236,77 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         bubbleParams = null
     }
 
+    // ---------- Jarvis ----------
+
+    /**
+     * Jarvis's glowing ring at the top of the screen with what it's doing ([state]) and says
+     * ([caption]). It never takes touches, so the app underneath stays usable.
+     */
+    fun showJarvis(state: String, caption: String?, thinking: Boolean = false) {
+        if (jarvis == null) {
+            val ring = ArcReactorView(ctx)
+            val title = TextView(ctx).apply {
+                text = "J A R V I S"
+                textSize = 11f
+                typeface = Typeface.DEFAULT_BOLD
+                setTextColor(0xFF5CE1FF.toInt())
+            }
+            val status = TextView(ctx).apply {
+                textSize = 13f
+                setTextColor(0xFFCFEFFF.toInt())
+            }
+            val words = TextView(ctx).apply {
+                textSize = 15f
+                setTextColor(0xFFFFFFFF.toInt())
+                maxLines = 5
+                ellipsize = TextUtils.TruncateAt.END
+                setPadding(0, px(4), 0, 0)
+            }
+            val text = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(title)
+                addView(status)
+                addView(words)
+            }
+            val card = LinearLayout(ctx).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                setPadding(px(14), px(12), px(18), px(12))
+                background = rounded(0xEB07101F.toInt(), 22, stroke = 0x995CE1FF.toInt())
+                addView(ring, LinearLayout.LayoutParams(px(64), px(64)).apply { marginEnd = px(14) })
+                addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+            }
+            val p = windowParams().apply {
+                flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                width = ctx.resources.displayMetrics.widthPixels - px(24)
+                x = px(12)
+                y = px(56)
+            }
+            wm.addView(card, p)
+            jarvis = card
+            jarvisRing = ring
+            jarvisState = status
+            jarvisCaption = words
+        }
+        jarvisState?.text = state
+        jarvisCaption?.text = caption.orEmpty()
+        jarvisCaption?.visibility = if (caption.isNullOrBlank()) View.GONE else View.VISIBLE
+        jarvisRing?.thinking = thinking
+    }
+
+    /** How loud the microphone is (0..1), for the ring's pulse. */
+    fun jarvisLevel(level: Float) {
+        jarvisRing?.level = level
+    }
+
+    fun hideJarvis() {
+        jarvis?.let { runCatching { wm.removeView(it) } }
+        jarvis = null
+        jarvisRing = null
+        jarvisState = null
+        jarvisCaption = null
+    }
+
     // ---------- Panel ----------
 
     fun showPanel(input: Rect, screen: Rect) {
@@ -254,6 +331,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     fun hideAll() {
         hideBubble()
         hidePanel()
+        hideJarvis()
     }
 
     /** Reply mode: the style menu, with [style] highlighted. (Who the person is, Vakya works out itself.) */

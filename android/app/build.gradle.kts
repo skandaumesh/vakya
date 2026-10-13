@@ -24,15 +24,27 @@ android {
         applicationId = "com.onezerolabs.vakya"
         minSdk = 26
         targetSdk = 35
-        versionCode = 5
-        versionName = "0.4.1"
+        versionCode = 6
+        versionName = "0.5.0"
         // Debug builds talk to the laptop over USB (adb reverse); no key needed locally.
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"http://localhost:8000\"")
         buildConfigField("String", "APP_KEY", "\"\"")
+        // ONNX Runtime ships native code per CPU type; real phones are ARM. Keeps the APK small.
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+        }
     }
 
     buildFeatures {
         buildConfig = true
+    }
+
+    // Compress native code (ONNX Runtime for "Hey Jarvis") inside the APK: a much smaller file to
+    // share, unpacked once on install.
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
     }
 
     signingConfigs {
@@ -81,5 +93,17 @@ kotlin {
 }
 
 dependencies {
+    // "Hey Jarvis": openWakeWord's models (assets/jarvis) run on the phone with ONNX Runtime.
+    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.31.0")
+
     testImplementation("junit:junit:4.13.2")
+    // Unit tests run the same models with the desktop build of ONNX Runtime, and real org.json.
+    // 1.18: later desktop builds crash with the older Visual C++ runtime that Android Studio's Java bundles.
+    testImplementation("com.microsoft.onnxruntime:onnxruntime:1.18.0")
+    testImplementation("org.json:json:20240303")
+}
+
+// The Android build of ONNX Runtime can't load on the desktop JVM that runs unit tests.
+configurations.matching { it.name.endsWith("UnitTestRuntimeClasspath") }.configureEach {
+    exclude(group = "com.microsoft.onnxruntime", module = "onnxruntime-android")
 }

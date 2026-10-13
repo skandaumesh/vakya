@@ -90,6 +90,7 @@ class OpenAICompatProvider:
         client=None,
         fallback_models: list[str] | None = None,
         vision_model: str | None = None,
+        stt_model: str | None = None,
         model_extra: dict[str, dict] | None = None,
     ):
         # Per-model request options that override `extra` (models differ in what they accept).
@@ -98,6 +99,7 @@ class OpenAICompatProvider:
         self.name = name
         self.model = model
         self.vision_model = vision_model
+        self.stt_model = stt_model
         # Tried in order when the one before is rate-limited. On Groq every model
         # has its own free allowance, so a fallback adds capacity, not just retries.
         self.models = [model, *(fallback_models or [])]
@@ -165,6 +167,30 @@ class OpenAICompatProvider:
         log.info("vision provider=%s model=%s in=%s out=%s", self.name, self.vision_model,
                  getattr(resp.usage, "prompt_tokens", "?"), getattr(resp.usage, "completion_tokens", "?"))
         return resp.choices[0].message.content or ""
+
+    async def transcribe(self, audio: bytes) -> str:
+        """Speech (a WAV file) to text, with the provider's speech model."""
+        if not self.stt_model:
+            raise LLMError(f"{self.name} can't turn speech into text")
+        started = time.perf_counter()
+        try:
+            resp = await self.client.audio.transcriptions.create(
+                model=self.stt_model, file=("command.wav", audio, "audio/wav"), temperature=0,
+            )
+        except openai.RateLimitError as e:
+            raise _rate_limited(self.name, e) from e
+        except openai.AuthenticationError as e:
+            raise MissingCredentials(f"{self.name} rejected the API key") from e
+        except (openai.APITimeoutError, openai.APIConnectionError) as e:
+            raise ProviderTimeout(f"{self.name} didn't answer in time") from e
+        except openai.InternalServerError as e:
+            raise RateLimited(f"{self.name} is busy right now, try again in a minute", retry_after=30) from e
+        except openai.APIStatusError as e:
+            raise LLMError(f"{self.name} speech error {e.status_code} {_error_code(e)}".rstrip()) from e
+        # Sizes and timings only, never what was said.
+        log.info("speech provider=%s model=%s ms=%d bytes=%d", self.name, self.stt_model,
+                 int((time.perf_counter() - started) * 1000), len(audio))
+        return (getattr(resp, "text", "") or "").strip()
 
     async def _call(self, model, messages, response_format, output_format, max_tokens, started):
         last_error = ""

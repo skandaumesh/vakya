@@ -55,6 +55,7 @@ The first run builds a style card from your messages and saves it as `<chat>.sty
 |---|---|---|
 | `POST /suggest` | chat messages, relationship, style, style card, examples, memory, draft, `language` (`auto`, `english`, `kanglish`, `kannada`, `hinglish`) | intent, 3 `{label, text}` options, memory updates |
 | `POST /compose` | `intent` (what I want to say, in rough words), plus the chat, relationship, style card, examples, memory | `kind`, `meaning`, and either the message once per style (`variants`: `mine`, `professional`, `short`, `genz`) or, when `intent` asks for something to send ("pickup line"), 4 labelled `ideas` |
+| `POST /jarvis` | `audio` (base64 WAV of a spoken command) or `text`, plus what's on screen (`in_chat`, chat, style card, language, `local_time`) | `heard`, `action` (write, suggest, read, answer), `say` (spoken reply), and `compose` or `suggest` results |
 | `POST /style-card` | `{"my_messages": [...]}` (5+) | style card to store on the device |
 | `GET /health` | | `{"ok": true, "model": "groq/openai/gpt-oss-120b"}` |
 

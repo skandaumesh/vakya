@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.4.1.apk → Install.
+   b. Open Vakya-0.5.0.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.
@@ -62,6 +62,15 @@ Is it private?
      for 4 different ideas that fit the chat.
    - If your message is the last one in the chat, Vakya suggests follow-ups
      (a nudge or an update) instead of replies.
+
+Hey Jarvis (optional voice assistant)
+   - In Vakya, tick "Listen for "Hey Jarvis"" and allow the microphone.
+   - Say "Hey Jarvis", then: "tell him I'll be ten minutes late", "what did
+     she say?", "what should I reply?", "roast him", or ask any question.
+     Jarvis writes into the open chat (you still press Send) and answers out loud.
+   - It listens for its name on your phone only; just what you say after
+     "Hey Jarvis" is sent to be understood. A notification shows while it's on,
+     and it uses some battery. Untick it to turn it off.
 
 4. Make it sound like YOU (optional, recommended)
    - In WhatsApp, open a chat you text a lot in → ⋮ → More → Export chat →

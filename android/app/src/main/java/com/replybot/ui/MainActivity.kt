@@ -1,6 +1,8 @@
 package com.replybot.ui
 
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.Manifest
 import android.app.AlertDialog
 import android.content.ComponentName
 import android.content.Intent
@@ -36,6 +38,7 @@ import com.replybot.data.ReplyApi
 import com.replybot.data.Store
 import com.replybot.importer.ChatExportParser
 import com.replybot.service.ChatReaderService
+import com.replybot.jarvis.JarvisService
 import com.replybot.service.PanelTheme
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -49,6 +52,8 @@ class MainActivity : Activity() {
     private lateinit var store: Store
 
     private lateinit var serviceStatus: TextView
+    private lateinit var jarvisToggle: CheckBox
+    private var talkAfterPermission = false
     private lateinit var restrictedHelp: LinearLayout
     private lateinit var serverStatus: TextView
     private lateinit var styleSummary: TextView
@@ -69,6 +74,7 @@ class MainActivity : Activity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         store = Store.get(this)
+        maybeRunJarvisTest(intent)
 
         val col = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -157,6 +163,33 @@ class MainActivity : Activity() {
         }
         col.addView(card1)
 
+        // Hey Jarvis: the voice assistant.
+        val jarvisCard = glassCard().apply {
+            addView(cardHeading("Hey Jarvis", "VOICE"))
+            addView(text(
+                "Say \"Hey Jarvis\", then what you need: \"tell him I'll be ten minutes late\", " +
+                    "\"what did she say?\", \"what should I reply?\", \"roast him\", or ask anything. " +
+                    "Jarvis writes into the open chat and answers out loud. You still press send.",
+                14f,
+            ))
+            jarvisToggle = glassCheckBox("Listen for \"Hey Jarvis\"", store.jarvisOn) { checked ->
+                if (checked) turnOnJarvis() else turnOffJarvis()
+            }
+            addView(jarvisToggle)
+            addView(glassButton("Talk to Jarvis now", primary = false) {
+                if (micAllowed()) JarvisService.start(this@MainActivity, JarvisService.ACTION_TALK)
+                else askForMic(talkAfter = true)
+            })
+            addView(text(
+                "Listening for \"Hey Jarvis\" happens on this phone: nothing is sent until you say it. " +
+                    "Then the next few seconds go to Groq to turn into text, and on to the Vakya server. " +
+                    "A notification shows while Jarvis listens, and it uses some battery. " +
+                    "Wake word by openWakeWord (free for personal, non-commercial use).",
+                12f, muted = true,
+            ))
+        }
+        col.addView(jarvisCard)
+
         // Privacy, right where people decide to switch Vakya on. Every line must stay true:
         // check the server's logging, the accessibility scope and the AI providers before editing.
         val privacyCard = glassCard().apply {
@@ -176,6 +209,8 @@ class MainActivity : Activity() {
                     "Kannada-English chats and when Groq is busy. Gemini is Google's free tier, so Google may use " +
                     "what it receives to improve its products, and people at Google may review it. Add your own " +
                     "Groq key below and your chats never go to Google.\n\n" +
+                    "• Hey Jarvis (if you switch it on) listens for its name on this phone only. What you say " +
+                    "after it goes to Groq to become text, then to the Vakya server, and isn't kept.\n\n" +
                     "• Don't use Vakya on chats with OTPs, passwords or bank details.",
                 14f,
             ))
@@ -332,6 +367,10 @@ class MainActivity : Activity() {
     override fun onResume() {
         super.onResume()
         render()
+        // Jarvis can only start listening while Vakya is open (Android's rule for the microphone),
+        // so this brings it back after a restart.
+        if (store.jarvisOn && micAllowed() && !JarvisService.running) JarvisService.start(this)
+        jarvisToggle.isChecked = store.jarvisOn && micAllowed()
     }
 
     override fun onDestroy() {
@@ -415,6 +454,57 @@ class MainActivity : Activity() {
     }
 
     @Deprecated("Activity result API needs androidx; the framework callback is fine here.")
+    // ---------- Jarvis ----------
+
+    private fun micAllowed() = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+
+    private fun askForMic(talkAfter: Boolean = false) {
+        talkAfterPermission = talkAfter
+        val wanted = mutableListOf(Manifest.permission.RECORD_AUDIO)
+        if (Build.VERSION.SDK_INT >= 33) wanted += Manifest.permission.POST_NOTIFICATIONS
+        requestPermissions(wanted.toTypedArray(), REQUEST_MIC)
+    }
+
+    private fun turnOnJarvis() {
+        if (!micAllowed()) {
+            askForMic()
+            return
+        }
+        store.jarvisOn = true
+        JarvisService.start(this)
+        toast("Jarvis is listening. Say \"Hey Jarvis\".")
+    }
+
+    private fun turnOffJarvis() {
+        store.jarvisOn = false
+        JarvisService.stop(this)
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onRequestPermissionsResult(requestCode: Int, permissions: Array<out String>, grantResults: IntArray) {
+        @Suppress("DEPRECATION")
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode != REQUEST_MIC) return
+        if (micAllowed()) {
+            if (talkAfterPermission) JarvisService.start(this, JarvisService.ACTION_TALK) else turnOnJarvis()
+        } else {
+            jarvisToggle.isChecked = false
+            toast("Jarvis needs the microphone to hear you.")
+        }
+    }
+
+    /** Self-test from a computer: adb push a WAV to Android/data/<app>/files, then open Vakya with jarvis_test=<name>. */
+    private fun maybeRunJarvisTest(intent: Intent?) {
+        val file = intent?.getStringExtra("jarvis_test") ?: return
+        intent.removeExtra("jarvis_test")
+        if (micAllowed()) JarvisService.start(this, JarvisService.ACTION_TEST, file)
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        maybeRunJarvisTest(intent)
+    }
+
     override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
         @Suppress("DEPRECATION")
         super.onActivityResult(requestCode, resultCode, data)
@@ -708,6 +798,7 @@ class MainActivity : Activity() {
 
     companion object {
         private const val REQUEST_EXPORT = 1
+        private const val REQUEST_MIC = 2
     }
 }
 

@@ -1,10 +1,12 @@
 import re
+import time
 
 from . import config
 
 from .errors import LLMError, LLMRefusal, MissingCredentials, ProviderTimeout, ProviderUnavailable, RateLimited
 from .prompts import (
     COMPOSE_SYSTEM,
+    JARVIS_SYSTEM,
     FRIEND_ONLY_WORDS,
     INDIAN_ADDRESS_WORDS,
     KANNADA_MIXES,
@@ -16,6 +18,7 @@ from .prompts import (
     compose_mix,
     is_idea_request,
     render_compose_input,
+    render_jarvis_input,
     render_style_input,
     render_suggest_input,
     strip_slurs,
@@ -29,6 +32,9 @@ from .schemas import (
     ComposeRequest,
     ComposeResponse,
     ComposeVariant,
+    JarvisPlan,
+    JarvisRequest,
+    JarvisResponse,
     StyleCard,
     StyleTraits,
     SuggestOutput,
@@ -39,7 +45,7 @@ from .style_stats import compute_stats
 from .vision import describe_media
 
 __all__ = [
-    "suggest_replies", "compose_message", "build_style_card",
+    "suggest_replies", "compose_message", "jarvis", "build_style_card",
     "LLMError", "LLMRefusal", "MissingCredentials", "ProviderTimeout", "ProviderUnavailable", "RateLimited",
 ]
 
@@ -317,3 +323,54 @@ async def build_style_card(my_messages: list[str]) -> StyleCard:
         "signature_phrases": [x for x in traits.signature_phrases if not SLURS.search(x)],
     })
     return StyleCard(traits=traits, stats=compute_stats(sample))
+
+
+# ---------- Jarvis ----------
+
+# The wake word itself often ends up at the start of the transcript.
+_WAKE_WORD = re.compile(r"^\s*(?:hey|hi|ok|okay)?[\s,]*j[ae]rv[ie]s[\s,.!?]*", re.IGNORECASE)
+
+
+async def transcribe(audio: bytes) -> str:
+    provider = active_provider()
+    if not hasattr(provider, "transcribe"):
+        raise LLMError("speech-to-text isn't set up on this server")
+    return await provider.transcribe(audio)
+
+
+async def jarvis(req: JarvisRequest, audio: bytes | None) -> JarvisResponse:
+    """A spoken command: hear it, decide what to do, and do the chat part with the usual tools."""
+    started = time.perf_counter()
+    heard = req.text or (await transcribe(audio) if audio else "")
+    heard = _WAKE_WORD.sub("", heard).strip()
+    if not heard:
+        return JarvisResponse(heard="", action="answer", say="I'm listening, boss. Say that again?",
+                              latency_ms=int((time.perf_counter() - started) * 1000))
+
+    plan: JarvisPlan
+    plan, _ = await _parse(JARVIS_SYSTEM, render_jarvis_input(req, heard), JarvisPlan, max_tokens=800)
+    say = strip_slurs(plan.say.strip()) or "Done, boss."
+    action = plan.action
+    if action in ("write", "suggest", "read") and not req.in_chat:
+        action, say = "answer", "Open the chat first, boss, then ask me again."
+
+    context = dict(
+        app=req.app, chat_title=req.chat_title, is_group=req.is_group, messages=req.messages,
+        relationship=req.relationship, style_card=req.style_card, examples=req.examples,
+        memory=req.memory, language=req.language,
+    )
+    compose = suggest = None
+    if action == "write":
+        compose = await compose_message(ComposeRequest(intent=(plan.intent or heard)[:1000], **context))
+        if compose.kind == "ideas":
+            # Ideas are shown to pick from, not typed in.
+            say = f"{len(compose.ideas)} ideas on screen, boss. Take your pick."
+    elif action == "suggest":
+        if any(m.sender == "them" for m in req.messages):
+            suggest = await suggest_replies(SuggestRequest(style=req.style, **context))
+        else:
+            action, say = "answer", "Nothing to reply to yet, boss."
+    return JarvisResponse(
+        heard=plan.heard or heard, action=action, say=say, compose=compose, suggest=suggest,
+        latency_ms=int((time.perf_counter() - started) * 1000),
+    )

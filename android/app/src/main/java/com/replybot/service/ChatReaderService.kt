@@ -12,6 +12,9 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
 import com.replybot.bank.ReplyBank
 import com.replybot.data.ChatMsg
+import com.replybot.data.ComposeResult
+import com.replybot.data.JarvisContext
+import com.replybot.data.SuggestResult
 import com.replybot.data.ContactRecord
 import com.replybot.data.NON_FRIEND
 import com.replybot.data.ReplyApi
@@ -323,6 +326,70 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         }
     }
 
+    // ---------- Jarvis ----------
+
+    /**
+     * The chat's message box, for Jarvis: the focused box, or WhatsApp's box even when the
+     * keyboard is closed. Only in apps the user ticked.
+     */
+    private fun chatBox(): Pair<String, AccessibilityNodeInfo>? {
+        chatInput()?.let { return it }
+        val root = rootInActiveWindow ?: return null
+        val pkg = root.packageName?.toString() ?: return null
+        if (pkg !in SUPPORTED || pkg !in store.enabledApps || !pkg.startsWith("com.whatsapp")) return null
+        return root.findAccessibilityNodeInfosByViewId("$pkg:id/entry").firstOrNull()?.let { pkg to it }
+    }
+
+    /** What's on screen for Jarvis: the app, and the open chat (title and messages) if there is one. */
+    fun jarvisContext(): JarvisContext {
+        val root = rootInActiveWindow ?: return JarvisContext(app = "phone")
+        val pkg = root.packageName?.toString().orEmpty()
+        val (chatPkg, box) = chatBox() ?: return JarvisContext(app = SUPPORTED[pkg] ?: "phone")
+        val snap = ChatReader.read(root, box, chatPkg, ChatReader.bounds(root))
+        val title = snap.title ?: "Unknown chat"
+        return JarvisContext(SUPPORTED.getValue(chatPkg), title, Store.key(chatPkg, title), snap.messages)
+    }
+
+    /** Put [text] in the open chat's message box. Never presses send. */
+    fun jarvisWrite(text: String): Boolean {
+        val box = chatBox()?.second ?: return false
+        val ok = box.performAction(
+            AccessibilityNodeInfo.ACTION_SET_TEXT,
+            Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text) },
+        )
+        if (ok) lastInserted = text
+        return ok
+    }
+
+    /** Open the panel on the current chat with Jarvis's reply options or ideas. */
+    fun jarvisShow(context: JarvisContext, suggest: SuggestResult? = null, compose: ComposeResult? = null) {
+        val (pkg, box) = chatBox() ?: return
+        val root = rootInActiveWindow ?: return
+        val key = context.chatKey ?: return
+        session = Session(pkg, key, context.chatTitle.orEmpty(), context.messages, "")
+        overlay.showPanel(ChatReader.bounds(box), ChatReader.bounds(root))
+        overlay.setLanguage(store.contact(key).language)
+        when {
+            suggest != null -> {
+                composing = false
+                updateHeader()
+                overlay.showResult(suggest)
+            }
+            compose != null -> {
+                composing = true
+                overlay.setComposeHeader()
+                overlay.showCompose(compose)
+            }
+        }
+    }
+
+    fun jarvisHud(state: String, caption: String? = null, thinking: Boolean = false) =
+        overlay.showJarvis(state, caption, thinking)
+
+    fun jarvisLevel(level: Float) = overlay.jarvisLevel(level)
+
+    fun jarvisHudHide() = overlay.hideJarvis()
+
     /** What's in the message box right now ("" for nothing or its grey hint). */
     private fun typedNow(): String = chatInput()?.second?.let { ChatReader.draftText(it).trim() }.orEmpty()
 
@@ -392,7 +459,7 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     }
 
     override fun onSuggestionTap(s: Suggestion) {
-        val input = chatInput()?.second
+        val input = chatBox()?.second
         val typed = input?.performAction(
             AccessibilityNodeInfo.ACTION_SET_TEXT,
             Bundle().apply { putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, s.text) },

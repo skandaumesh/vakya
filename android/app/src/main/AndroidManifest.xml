@@ -3,6 +3,14 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- "Hey Jarvis": listens on the phone for the wake word while switched on in Vakya,
+         with a notification showing (a foreground service of the microphone type). -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.VIBRATE" />
+
     <!-- allowBackup is off: the app stores the user's messages and contact notes. -->
     <application
         android:allowBackup="false"
@@ -33,5 +41,10 @@
                 android:name="android.accessibilityservice"
                 android:resource="@xml/accessibility_config" />
         </service>
+
+        <service
+            android:name="com.replybot.jarvis.JarvisService"
+            android:exported="false"
+            android:foregroundServiceType="microphone" />
     </application>
 </manifest>

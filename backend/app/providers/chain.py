@@ -54,6 +54,19 @@ class ChainProvider:
                 errors.append(e)
         raise self._most_useful(errors) if errors else RateLimited("all AI services are unavailable right now")
 
+    async def transcribe(self, audio: bytes) -> str:
+        """Speech to text with the first provider that has a speech model (Groq)."""
+        errors: list[Exception] = []
+        for p in self._available():
+            if not getattr(p, "stt_model", None):
+                continue
+            try:
+                return await p.transcribe(audio)
+            except _SKIPPABLE as e:
+                self._note_failure(p, e)
+                errors.append(e)
+        raise self._most_useful(errors) if errors else LLMError("no speech-to-text available")
+
     async def describe_image(self, image_b64: str, prompt: str) -> str:
         errors: list[Exception] = []
         for p in self._available():

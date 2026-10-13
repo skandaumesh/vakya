@@ -40,6 +40,30 @@ data class ComposeResult(
     val latencyMs: Int,
 )
 
+/** Jarvis's answer to a spoken command. */
+data class JarvisResult(
+    /** What Jarvis heard. */
+    val heard: String,
+    /** write, suggest, read or answer. */
+    val action: String,
+    /** What Jarvis says aloud. */
+    val say: String,
+    /** write: the message (or ideas) to put in the chat. */
+    val compose: ComposeResult?,
+    /** suggest: reply options. */
+    val suggest: SuggestResult?,
+)
+
+/** What's on screen when Jarvis is called: the app, and the open chat if there is one. */
+data class JarvisContext(
+    val app: String,
+    val chatTitle: String? = null,
+    val chatKey: String? = null,
+    val messages: List<ChatMsg> = emptyList(),
+) {
+    val inChat get() = chatTitle != null
+}
+
 /** What Vakya knows about one chat. Lives only on the phone. */
 class ContactRecord(
     /** Set by the user; wins over the model's guess. */

@@ -62,6 +62,11 @@ class Store private constructor(private val file: File, private val prefs: Share
         get() = prefs.getInt("bubble_dx", 0) to prefs.getInt("bubble_dy", 0)
         set(v) = prefs.edit().putInt("bubble_dx", v.first).putInt("bubble_dy", v.second).apply()
 
+    /** "Hey Jarvis" is switched on (the listening service runs while this is true). */
+    var jarvisOn: Boolean
+        get() = prefs.getBoolean("jarvis_on", false)
+        set(v) = prefs.edit().putBoolean("jarvis_on", v).apply()
+
     /** Background of the chat panel: auto, white, navy, black, rose, mint or glass. */
     var panelTheme: String
         get() = prefs.getString("panel_theme", "auto") ?: "auto"

@@ -189,3 +189,47 @@ class ComposeOutput(BaseModel):
 
 class ComposeResponse(ComposeOutput):
     latency_ms: int
+
+
+# ---------- Jarvis: "Hey Jarvis" + a spoken command ----------
+
+JarvisAction = Literal["write", "suggest", "read", "answer"]
+
+
+class JarvisRequest(BaseModel):
+    """A voice command (said after "Hey Jarvis") and what's on the phone's screen."""
+
+    audio: str | None = Field(
+        default=None, max_length=1_000_000, description="Base64 WAV of the command, 16 kHz mono, up to ~10 s."
+    )
+    text: str | None = Field(default=None, max_length=1000, description="The command as text instead of audio.")
+    app: str = "whatsapp"
+    in_chat: bool = Field(default=False, description="A chat with a message box is open.")
+    chat_title: str | None = None
+    is_group: bool = False
+    messages: list[ChatMessage] = Field(default_factory=list, max_length=40)
+    relationship: Relationship | None = None
+    style: ReplyStyle = "mine"
+    style_card: StyleCard | None = None
+    examples: list[str] = Field(default_factory=list, max_length=20)
+    memory: list[str] = Field(default_factory=list, max_length=30)
+    language: ReplyLanguage = "auto"
+    local_time: str | None = Field(default=None, max_length=60, description="The phone's time, e.g. 'Mon 13 Oct 2026, 8:30 pm'.")
+
+
+class JarvisPlan(BaseModel):
+    """What the model decides to do with a command."""
+
+    heard: str = Field(description="What I said, with obvious speech-to-text mistakes fixed.")
+    action: JarvisAction
+    intent: str = Field(default="", description="write: what to write, in my words. Else empty.")
+    say: str = Field(description="Jarvis's spoken answer: 1-2 short sentences.")
+
+
+class JarvisResponse(BaseModel):
+    heard: str
+    action: JarvisAction
+    say: str
+    compose: ComposeResponse | None = None
+    suggest: SuggestResponse | None = None
+    latency_ms: int

@@ -25,16 +25,19 @@ class ReplyApi(
 
     fun compose(body: JSONObject): ComposeResult = parseCompose(request("POST", "/compose", body))
 
+    /** Speech to text, then the AI and maybe a compose or suggest call: allow more time. */
+    fun jarvis(body: JSONObject): JarvisResult = parseJarvis(request("POST", "/jarvis", body, readTimeoutMs = 60_000))
+
     /** Returns the style card JSON to store as-is and send back with each suggestion. */
     fun styleCard(myMessages: List<String>): String =
         request("POST", "/style-card", JSONObject().put("my_messages", JSONArray(myMessages))).toString()
 
-    private fun request(method: String, path: String, body: JSONObject?): JSONObject {
+    private fun request(method: String, path: String, body: JSONObject?, readTimeoutMs: Int = 30_000): JSONObject {
         val conn = URL(base + path).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
             conn.connectTimeout = 5_000
-            conn.readTimeout = 30_000
+            conn.readTimeout = readTimeoutMs
             conn.setRequestProperty("Accept", "application/json")
             appKey?.let { conn.setRequestProperty("X-Vakya-Key", it) }
             deviceId?.let { conn.setRequestProperty("X-Vakya-Device", it) }
@@ -118,6 +121,44 @@ class ReplyApi(
             .put("examples", JSONArray(examples.takeLast(20)))
             .put("memory", JSONArray(memory.takeLast(30)))
             .put("intent", intent.take(1000))
+
+        /** [audio]: a WAV of the command; [context]: what's on screen. */
+        fun jarvisBody(
+            audio: ByteArray,
+            context: JarvisContext,
+            relationship: String?,
+            styleCardJson: String?,
+            style: String,
+            examples: List<String>,
+            memory: List<String>,
+            language: String?,
+            localTime: String,
+        ): JSONObject = JSONObject()
+            .put("audio", android.util.Base64.encodeToString(audio, android.util.Base64.NO_WRAP))
+            .put("app", context.app)
+            .put("in_chat", context.inChat)
+            .put("chat_title", context.chatTitle)
+            .put("messages", JSONArray(context.messages.takeLast(15).map {
+                JSONObject()
+                    .put("sender", if (it.fromMe) "me" else "them")
+                    .put("text", it.text.take(4000))
+                    .put("media", it.media)
+            }))
+            .put("relationship", relationship)
+            .put("style", style)
+            .put("style_card", styleCardJson?.let { JSONObject(it) })
+            .put("examples", JSONArray(examples.takeLast(20)))
+            .put("memory", JSONArray(memory.takeLast(30)))
+            .put("language", language ?: "auto")
+            .put("local_time", localTime)
+
+        fun parseJarvis(j: JSONObject) = JarvisResult(
+            heard = j.optString("heard"),
+            action = j.optString("action", "answer"),
+            say = j.optString("say"),
+            compose = j.optJSONObject("compose")?.let(::parseCompose),
+            suggest = j.optJSONObject("suggest")?.let(::parseResult),
+        )
 
         fun parseCompose(j: JSONObject): ComposeResult {
             val ideas = j.optString("kind") == "ideas"
