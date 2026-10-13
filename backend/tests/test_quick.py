@@ -68,3 +68,13 @@ def test_yes_sends_only_right_after_friday_asked():
     assert quick_plan("yes", NIGHT, []) is None
     other = [JarvisTurn(heard="what time is it", say="It's nine forty, boss.")]
     assert quick_plan("yes", NIGHT, other) is None
+
+
+@pytest.mark.parametrize("said, who, app", [
+    ("open Rahul's chat", "rahul", "whatsapp"),
+    ("open chat with Amma on WhatsApp", "amma", "whatsapp"),
+    ("open Priya's chat in messages", "priya", "sms"),
+])
+def test_open_a_persons_chat(said, who, app):
+    plan = quick_plan(said, NIGHT)
+    assert plan.task.kind == "message" and plan.task.contact == who and plan.task.app == app and plan.task.text == ""

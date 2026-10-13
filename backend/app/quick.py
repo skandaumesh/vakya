@@ -129,6 +129,11 @@ def quick_plan(heard: str, local_time: str | None = None, history: list[JarvisTu
         if re.fullmatch(pattern, t):
             return _plan(heard, "Done, boss.", kind="phone", target=target)
 
+    if m := re.fullmatch(r"open (?:my )?(?:chat with ([a-z][a-z ]{0,30}?)|([a-z][a-z ]{0,30}?)'?s chat)(?: (?:on|in) (whatsapp|messages))?", t):
+        who = (m[1] or m[2]).strip()
+        return _plan(heard, f"Here's your chat with {who.title()}, boss.", kind="message", contact=who,
+                     app="sms" if m[3] == "messages" else "whatsapp")
+
     if m := re.fullmatch(r"(?:open|launch|start) (?:the )?(.+?)(?: app)?", t):
         name = m[1].strip()
         if name and len(name.split()) <= 3 and name not in {"chat", "the chat", "message", "messages"}:

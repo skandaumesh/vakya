@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.6.0.apk → Install.
+   b. Open Vakya-0.6.1.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.

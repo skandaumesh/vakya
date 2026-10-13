@@ -173,17 +173,20 @@ class DeviceActions(private val context: Context) {
         val p = person(task.contact) ?: return noContact(task.contact)
         if (task.app.equals("sms", ignoreCase = true)) {
             val sms = Intent(Intent.ACTION_SENDTO, Uri.parse("smsto:" + Uri.encode(p.number))).putExtra("sms_body", task.text)
-            return if (launch(sms)) "Your message to ${p.name} is ready, boss. Shall I send it?" else "I couldn't open Messages, boss."
+            if (!launch(sms)) return "I couldn't open Messages, boss."
+            return if (task.text.isBlank()) "Here's your chat with ${p.name}, boss." else "Your message to ${p.name} is ready, boss. Shall I send it?"
         }
         // WhatsApp wants the number with its country code and no "+": Indian numbers by default.
         var number = p.number.filter { it.isDigit() }
         if (number.startsWith("0")) number = number.trimStart('0')
         if (number.length == 10) number = "91$number"
-        val url = Uri.parse("https://wa.me/$number?text=" + Uri.encode(task.text))
+        // No text: just open the chat ("open Rahul's chat").
+        val url = Uri.parse("https://wa.me/$number" + if (task.text.isBlank()) "" else "?text=" + Uri.encode(task.text))
         val opened = listOf("com.whatsapp", "com.whatsapp.w4b", null).any { pkg ->
             launch(Intent(Intent.ACTION_VIEW, url).also { if (pkg != null) it.setPackage(pkg) })
         }
-        return if (opened) "Your message to ${p.name} is ready, boss. Shall I send it?" else "I couldn't open WhatsApp, boss."
+        if (!opened) return "I couldn't open WhatsApp, boss."
+        return if (task.text.isBlank()) "Here's your chat with ${p.name}, boss." else "Your message to ${p.name} is ready, boss. Shall I send it?"
     }
 
     // ---------- Media, maps, search ----------
