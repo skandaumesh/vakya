@@ -1,0 +1,2 @@
+# Model files must stay byte-for-byte (sherpa-onnx reads tokens.txt and keywords.txt exactly).
+android/app/src/main/assets/** -text
