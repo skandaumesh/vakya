@@ -117,6 +117,16 @@ def quick_plan(heard: str, local_time: str | None = None, history: list[JarvisTu
         up = word in ("up", "increase", "raise")
         return _plan(heard, f"Volume {'up' if up else 'down'}, boss.", kind="volume", on=up)
 
+    if re.fullmatch(r"stop (?:scrolling|the scroll(?:ing)?|auto ?scroll(?:ing)?)", t):
+        return _plan(heard, "Stopped, boss.", kind="scroll", target="stop")
+    if m := re.fullmatch(r"(?:keep scrolling|auto ?scroll|scroll automatically|keep going)(?: every " + _NUMBER + r" seconds?)?", t):
+        every = _number(m[1]) if m[1] else 8
+        return _plan(heard, f"Scrolling every {every} seconds, boss. Say stop when you're done.", kind="scroll", on=True, seconds=every)
+    if re.fullmatch(r"(?:scroll(?: down)?|next(?: reel| video| post| one| story)?|swipe up|skip(?: it| this)?)", t):
+        return _plan(heard, "Done, boss.", kind="scroll", on=True)
+    if re.fullmatch(r"(?:scroll up|previous(?: reel| video| post| one)?|go back up|swipe down)", t):
+        return _plan(heard, "Done, boss.", kind="scroll", on=False)
+
     phone = {
         r"(?:take (?:a )?)?screenshot": "screenshot",
         r"(?:go )?(?:to (?:the )?)?home(?: screen)?|go home": "home",

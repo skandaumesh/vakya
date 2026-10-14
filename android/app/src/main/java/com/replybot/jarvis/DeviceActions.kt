@@ -35,6 +35,7 @@ class DeviceActions(private val context: Context) {
     private val store = Store.get(context)
 
     fun run(task: DeviceTask): String? = try {
+        opened = null
         when (task.kind) {
             "alarm" -> alarm(task)
             "timer" -> timer(task)
@@ -51,6 +52,7 @@ class DeviceActions(private val context: Context) {
             "volume" -> volume(task)
             "note_add" -> { store.addNote(task.text); null }
             "notes_clear" -> { store.clearNotes(); null }
+            "scroll" -> scroll(task)
             "send" -> if (ChatReaderService.running?.jarvisSend() == true) null else "I couldn't find the send button, boss. Tap it for me?"
             else -> null
         }
@@ -191,24 +193,35 @@ class DeviceActions(private val context: Context) {
 
     // ---------- Media, maps, search ----------
 
+    /**
+     * Opens the app's search for [DeviceTask.text], then taps the top matching song or video (apps
+     * only open their search screen from a link; "play from search" isn't honoured by all of them).
+     */
     private fun play(task: DeviceTask): String? {
-        val q = task.text.ifBlank { "music" }
-        val youtube = Intent(Intent.ACTION_VIEW, Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(q)))
-        // "Play from search" makes Spotify / YouTube Music start playing the best match (it's what
-        // Google Assistant uses); a plain search link would only open the search screen.
-        fun playIn(pkg: String?) = launch(
-            Intent(MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH)
-                .putExtra(SearchManager.QUERY, q)
-                .putExtra(MediaStore.EXTRA_MEDIA_FOCUS, "vnd.android.cursor.item/*")
-                .also { if (pkg != null) it.setPackage(pkg) },
-        )
-        val ok = when (task.app.lowercase()) {
-            "spotify" -> playIn(SPOTIFY) || launch(Intent(Intent.ACTION_VIEW, Uri.parse("spotify:search:" + Uri.encode(q))))
-            "youtube music" -> playIn(YT_MUSIC) || launch(youtube)
-            "youtube" -> launch(Intent(youtube).setPackage("com.google.android.youtube")) || launch(youtube)
-            else -> playIn(SPOTIFY) || playIn(YT_MUSIC) || playIn(null) || launch(youtube)
+        val q = task.text.ifBlank { "top hits" }
+        val app = task.app.lowercase()
+        fun has(pkg: String) = context.packageManager.getLaunchIntentForPackage(pkg) != null
+        val (pkg, uri) = when {
+            app == "youtube" || (app.isBlank() && !has(SPOTIFY) && !has(YT_MUSIC)) ->
+                YOUTUBE to "https://www.youtube.com/results?search_query=" + Uri.encode(q)
+            app == "youtube music" || (app.isBlank() && !has(SPOTIFY)) ->
+                YT_MUSIC to "https://music.youtube.com/search?q=" + Uri.encode(q)
+            else -> SPOTIFY to "spotify:search:" + Uri.encode(q)
         }
-        return if (ok) null else "I couldn't find a music app for that, boss."
+        if (!has(pkg)) return "That app isn't on your phone, boss."
+        if (!launch(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg))) return "I couldn't open it, boss."
+        ChatReaderService.running?.jarvisTapResult(q, pkg, preferPlay = pkg == SPOTIFY)
+        return null
+    }
+
+    private fun scroll(task: DeviceTask): String? {
+        val a11y = ChatReaderService.running ?: return "Switch Vakya on in Accessibility first, boss."
+        return when {
+            task.target == "stop" -> { a11y.stopAutoScroll(); null }
+            task.seconds > 0 -> { a11y.jarvisAutoScroll(task.seconds.coerceIn(3, 120)); null }
+            a11y.jarvisScroll(task.on) -> null
+            else -> "I couldn't scroll here, boss."
+        }
     }
 
     private fun navigate(place: String): String? {
@@ -285,10 +298,15 @@ class DeviceActions(private val context: Context) {
      * Opens [intent] from the accessibility service when it's on: Android lets apps with one start
      * screens from the background, which a plain service can't.
      */
+    /** The app the last task opened, to check it really came to the front. */
+    var opened: String? = null
+        private set
+
     private fun launch(intent: Intent): Boolean {
         val from: Context = ChatReaderService.running ?: context
         return try {
             from.startActivity(intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+            opened = intent.`package` ?: intent.resolveActivity(context.packageManager)?.packageName
             true
         } catch (e: ActivityNotFoundException) {
             false
@@ -300,6 +318,7 @@ class DeviceActions(private val context: Context) {
     private companion object {
         const val TAG = "Vakya"
         const val SPOTIFY = "com.spotify.music"
+        const val YOUTUBE = "com.google.android.youtube"
         const val YT_MUSIC = "com.google.android.apps.youtube.music"
     }
 }

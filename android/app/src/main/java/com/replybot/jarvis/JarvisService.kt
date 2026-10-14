@@ -356,6 +356,7 @@ class JarvisService : Service() {
                 Log.i(TAG, "jarvis: action=${r.action} task=${r.task?.kind}")
                 var say = r.say
                 conversationOver = r.action == "end"
+                if (r.action == "end") a11y?.stopAutoScroll()
                 if (r.action == "device" && r.task != null) {
                     if (r.task.kind == "phone" && r.task.target == "screenshot") {
                         // Out of the picture first.
@@ -364,7 +365,9 @@ class JarvisService : Service() {
                         history.addLast(r.heard to say)
                         return
                     }
+                    val before = a11y?.foregroundPackage()
                     device.run(r.task)?.let { say = it }
+                    checkOpened(r.task.kind, before)
                 }
                 var caption = say
                 when (r.action) {
@@ -390,6 +393,28 @@ class JarvisService : Service() {
                 a11y?.jarvisHud("Friday", sorry)
                 speak(sorry)
             }
+    }
+
+    private var lastBlockedHint = 0L
+
+    /**
+     * Some phones (vivo, Xiaomi, Oppo...) silently stop apps opening other apps from the
+     * background. If what Friday opened didn't come to the front, say what to allow.
+     */
+    private fun checkOpened(kind: String, before: String?) {
+        if (kind !in setOf("open_app", "play", "navigate", "search", "message")) return
+        val target = device.opened ?: return
+        if (target == before) return
+        main.postDelayed({
+            val now = ChatReaderService.running?.foregroundPackage()
+            val quiet = System.currentTimeMillis() - lastBlockedHint > 10 * 60_000L
+            if (now == before && now != target && quiet) {
+                lastBlockedHint = System.currentTimeMillis()
+                Log.w(TAG, "friday: the phone blocked opening $target")
+                ChatReaderService.running?.jarvisHud("Friday", "Your phone stopped me opening it. In Vakya, tap \"Let Friday open apps\".")
+                voice?.speak("Your phone stopped me opening it, boss. In Vakya, tap Let Friday open apps.") {}
+            }
+        }, 1800)
     }
 
     private fun trouble(e: Throwable): String = when {

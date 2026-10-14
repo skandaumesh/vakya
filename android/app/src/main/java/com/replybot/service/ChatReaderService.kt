@@ -388,6 +388,123 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         return null
     }
 
+    /** The app now in front (its package name). */
+    fun foregroundPackage(): String? = rootInActiveWindow?.packageName?.toString()
+
+    /**
+     * "Play X": once [pkg] shows its search results, tap the top match for [query] (or Spotify's
+     * play button when no row matches). Tries for ~7 s while the results load; only taps something
+     * whose words match what was asked for.
+     */
+    fun jarvisTapResult(query: String, pkg: String, preferPlay: Boolean, attempts: Int = 14) {
+        val root = rootInActiveWindow
+        if (root != null && root.packageName?.toString() == pkg) {
+            val target = findResult(root, query, preferPlay)
+            if (target != null && click(target)) {
+                Log.i("Vakya", "friday: played a result in $pkg")
+                return
+            }
+        }
+        if (attempts > 0) main.postDelayed({ jarvisTapResult(query, pkg, preferPlay, attempts - 1) }, 500)
+    }
+
+    private fun findResult(root: AccessibilityNodeInfo, query: String, preferPlay: Boolean): AccessibilityNodeInfo? {
+        val split = Regex("[^\\p{L}0-9]+")
+        val words = query.lowercase().split(split).filter { it.length > 1 }.toSet()
+        if (words.isEmpty()) return null
+        val screen = ChatReader.bounds(root)
+        val below = screen.top + screen.height() * 0.14  // under the search box
+        var best: AccessibilityNodeInfo? = null
+        var bestScore = 0
+        var bestTop = Int.MAX_VALUE
+        var play: AccessibilityNodeInfo? = null
+        walk(root) { n ->
+            if (!n.isVisibleToUser || n.isEditable) return@walk
+            val r = ChatReader.bounds(n)
+            if (r.top < below) return@walk
+            val label = (n.contentDescription ?: n.text)?.toString()?.lowercase().orEmpty()
+            if (label.isEmpty()) return@walk
+            if (preferPlay && play == null && Regex("^play\\b").containsMatchIn(label) && !label.startsWith("playlist")) play = n
+            val have = label.split(split).toSet()
+            val score = words.count { it in have }
+            if (score > bestScore || (score == bestScore && score > 0 && r.top < bestTop)) {
+                best = n
+                bestScore = score
+                bestTop = r.top
+            }
+        }
+        return best?.takeIf { bestScore * 2 >= words.size } ?: play
+    }
+
+    /** "Next reel": swipe up like a finger (or scroll the biggest list back/forward). */
+    fun jarvisScroll(forward: Boolean): Boolean {
+        val m = resources.displayMetrics
+        val x = m.widthPixels / 2f
+        val (from, to) = if (forward) m.heightPixels * 0.72f to m.heightPixels * 0.28f else m.heightPixels * 0.28f to m.heightPixels * 0.72f
+        val path = android.graphics.Path().apply { moveTo(x, from); lineTo(x, to) }
+        val swipe = android.accessibilityservice.GestureDescription.Builder()
+            .addStroke(android.accessibilityservice.GestureDescription.StrokeDescription(path, 0, 220))
+            .build()
+        if (dispatchGesture(swipe, null, null)) return true
+        val root = rootInActiveWindow ?: return false
+        var biggest: AccessibilityNodeInfo? = null
+        var area = 0
+        walk(root) { n ->
+            if (n.isScrollable && n.isVisibleToUser) {
+                val r = ChatReader.bounds(n)
+                if (r.width() * r.height() > area) {
+                    area = r.width() * r.height()
+                    biggest = n
+                }
+            }
+        }
+        val action = if (forward) AccessibilityNodeInfo.ACTION_SCROLL_FORWARD else AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD
+        return biggest?.performAction(action) == true
+    }
+
+    private var autoScroll: Runnable? = null
+
+    /** "Keep scrolling": next every [seconds], until "stop", leaving the app, or 15 minutes. */
+    fun jarvisAutoScroll(seconds: Int) {
+        stopAutoScroll()
+        val app = foregroundPackage()
+        val until = android.os.SystemClock.uptimeMillis() + 15 * 60_000L
+        val tick = object : Runnable {
+            override fun run() {
+                if (foregroundPackage() != app || android.os.SystemClock.uptimeMillis() > until) {
+                    autoScroll = null
+                    return
+                }
+                jarvisScroll(true)
+                main.postDelayed(this, seconds * 1000L)
+            }
+        }
+        autoScroll = tick
+        main.postDelayed(tick, seconds * 1000L)
+    }
+
+    fun stopAutoScroll() {
+        autoScroll?.let(main::removeCallbacks)
+        autoScroll = null
+    }
+
+    private fun click(node: AccessibilityNodeInfo): Boolean {
+        var n: AccessibilityNodeInfo? = node
+        while (n != null && !n.isClickable) n = n.parent
+        return n?.performAction(AccessibilityNodeInfo.ACTION_CLICK) == true
+    }
+
+    private fun walk(root: AccessibilityNodeInfo, visit: (AccessibilityNodeInfo) -> Unit) {
+        val stack = arrayListOf(root)
+        var seen = 0
+        while (stack.isNotEmpty() && seen < 1500) {
+            val n = stack.removeAt(stack.lastIndex)
+            seen++
+            visit(n)
+            for (i in n.childCount - 1 downTo 0) n.getChild(i)?.let { stack.add(it) }
+        }
+    }
+
     /** Open the panel on the current chat with Friday's reply options or ideas. */
     fun jarvisShow(context: JarvisContext, suggest: SuggestResult? = null, compose: ComposeResult? = null) {
         val (pkg, box) = chatBox() ?: return

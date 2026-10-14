@@ -182,6 +182,11 @@ class MainActivity : Activity() {
             addView(glassButton("Allow contacts (for \"call Amma\", \"message Rahul\")", primary = false) {
                 requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), REQUEST_CONTACTS)
             })
+            addView(glassButton("Let Friday open apps (vivo, Xiaomi, Oppo…)", primary = false) {
+                // These phones have their own switch for opening apps from the background.
+                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                toast("Permissions → \"Display pop-up windows while running in the background\" (or \"Open apps in background\") → Allow")
+            })
             addView(glassButton("Talk to Friday now", primary = false) {
                 if (micAllowed()) JarvisService.start(this@MainActivity, JarvisService.ACTION_TALK)
                 else askForMic(talkAfter = true)
@@ -217,7 +222,9 @@ class MainActivity : Activity() {
                     "Groq key below and your chats never go to Google.\n\n" +
                     "• Hey Friday (if you switch it on) listens for her name on this phone only. What you say " +
                     "after it goes to Groq to become text, then to the Vakya server, and isn't kept. " +
-                    "For calls and messages it looks names up in your contacts on this phone; contacts are never sent anywhere.\n\n" +
+                    "For calls and messages it looks names up in your contacts on this phone; contacts are never sent anywhere. " +
+                    "When you ask her to play a song or scroll, she looks at that app's screen just then to press play or swipe; " +
+                    "nothing from it is saved or sent.\n\n" +
                     "• Don't use Vakya on chats with OTPs, passwords or bank details.",
                 14f,
             ))

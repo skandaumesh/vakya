@@ -11,8 +11,8 @@ import com.k2fsa.sherpa.onnx.OnlineStream
 /**
  * "Hey Friday", heard on the phone (no audio leaves it) by sherpa-onnx's keyword spotter: a
  * tiny speech model (assets/friday, Apache-2.0) that listens for the phrase in keywords.txt.
- * Checked on 3 voices before shipping: 9/9 "Hey Friday" caught, 0/15 false alarms on
- * "see you on Friday", "Thank God it's Friday", "Hey Jarvis", "Hey there"...
+ * Checked on 3 voices, clean, quiet and noisy: 9/9 clean and 8/9 noisy "Hey Friday" caught,
+ * 0/15 false alarms on "see you on Friday", "Thank God it's Friday", "Hey Jarvis", "Hey there"...
  */
 class FridayWake(assets: AssetManager) : AutoCloseable {
 
@@ -38,11 +38,12 @@ class FridayWake(assets: AssetManager) : AutoCloseable {
                 provider = "cpu",
             ),
             maxActivePaths = 4,
-            // "▁HE Y ▁F RI DAY :1.0 #0.35 @HEY_FRIDAY": the phrase as the model's word pieces,
-            // with its boost (:) and how sure the model must be (#).
+            // "▁HE Y ▁F RI DAY :2.5 #0.15 @HEY_FRIDAY": the phrase as the model's word pieces,
+            // with its boost (:) and how sure the model must be (#). Tuned on clips made quiet and
+            // noisy (a real room): 8/9 caught at 10 dB of noise (was 3/9), 0/15 false alarms.
             keywordsFile = "$DIR/keywords.txt",
-            keywordsScore = 1.0f,
-            keywordsThreshold = 0.35f,
+            keywordsScore = 2.5f,
+            keywordsThreshold = 0.15f,
             numTrailingBlanks = 1,
         ),
     )

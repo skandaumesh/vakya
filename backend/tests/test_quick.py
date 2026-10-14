@@ -78,3 +78,18 @@ def test_yes_sends_only_right_after_friday_asked():
 def test_open_a_persons_chat(said, who, app):
     plan = quick_plan(said, NIGHT)
     assert plan.task.kind == "message" and plan.task.contact == who and plan.task.app == app and plan.task.text == ""
+
+
+@pytest.mark.parametrize("said, on, seconds, target", [
+    ("scroll down", True, 0, ""),
+    ("next reel", True, 0, ""),
+    ("next", True, 0, ""),
+    ("scroll up", False, 0, ""),
+    ("previous reel", False, 0, ""),
+    ("keep scrolling", True, 8, ""),
+    ("auto scroll every 15 seconds", True, 15, ""),
+    ("stop scrolling", True, 0, "stop"),
+])
+def test_scrolling(said, on, seconds, target):
+    plan = quick_plan(said, NIGHT)
+    assert plan.task.kind == "scroll" and plan.task.on is on and plan.task.seconds == seconds and plan.task.target == target

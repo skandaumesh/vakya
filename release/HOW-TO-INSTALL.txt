@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.6.1.apk → Install.
+   b. Open Vakya-0.6.2.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.
@@ -72,8 +72,11 @@ Hey Friday (optional voice assistant)
    - It also runs your phone: "set an alarm for 6", "remind me in 20 minutes
      to call Amma", "open Instagram", "call Amma", "message Rahul I'm on my
      way", "play Kesariya", "navigate to MG Road", "turn on the flashlight",
-     "take a screenshot", "add milk to my list". For calls and messages by
+     "take a screenshot", "add milk to my list", "next reel", "keep scrolling".
+     For calls and messages by
      name, tap "Allow contacts" in Vakya (contacts never leave your phone).
+   - Phone won't let her open apps (vivo, Xiaomi, Oppo)? In Vakya tap "Let Friday
+     open apps" and allow "Display pop-up windows while running in the background".
    - After she answers, just keep talking: no need to say "Hey Friday" again.
      Say "thanks" (or stay quiet) when you're done.
    - She listens for her name on your phone only; just what you say after
