@@ -29,6 +29,8 @@ android/keystore/
 desktop/extension/config.js
 release/*.zip
 android/app/libs/*.aar
+# Friday's voice model: downloaded by the build
+android/app/voice/
 
 # Unzipped extension (holds config.js with the app key)
 release/Vakya-Desktop*/

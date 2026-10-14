@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.7.0.apk → Install.
+   b. Open Vakya-0.8.0.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.
@@ -85,6 +85,13 @@ Hey Friday (optional voice assistant)
      Vakya → ⋮ → Allow restricted settings). Then ask "any new messages?" or
      "what did Rahul send?". Tick "Tell me when a message comes" and she says
      "Message from Rahul. Shall I read it?" (not on silent or in a call).
+   - Say "Friday" or "Hey Friday", then what you need; you can say it all in one
+     breath ("Friday, play Kesariya"). Her voice is "Jenny", an Irish voice made
+     on your phone; untick it in Vakya for the phone's own voice.
+   - With the phone locked she still listens, answers, pauses or skips music
+     and reads messages. To open an app she asks you to unlock (fingerprint or
+     face), then does it. Tap "Keep Friday on when the phone is locked" so the
+     battery saver doesn't stop her.
    - Your day: tap "Let Friday learn my day" and turn on "Permit usage access"
      for Vakya. Then ask "how long was I on Instagram today?".
    - Tell her about yourself ("my name is ...", "I work at ...", "remember I go

@@ -219,3 +219,36 @@ def test_messages_outside_a_chat_are_read_from_notifications(fake):
     fake["plan"] = JarvisPlan(heard="what did Rahul send", action="read", say="Rahul asked if the movie's at six, boss.")
     data = client.post("/jarvis", json={**NOTIFS, "text": "what did Rahul send"}).json()
     assert data["action"] == "answer" and data["say"] == "Rahul asked if the movie's at six, boss."
+
+
+@pytest.mark.parametrize("said, meant, rest", [
+    ("Hey Friday, what's the time?", True, "what's the time?"),
+    ("Friday play Kesariya", True, "play Kesariya"),
+    ("OK Friday. Set an alarm for 6.", True, "Set an alarm for 6."),
+    ("So yeah. Hey Friday, call Amma.", True, "call Amma."),
+    ("Um, Friday, open Instagram", True, "open Instagram"),
+    ("See you on Friday then.", False, None),
+    ("Thank God it's Friday!", False, None),
+    ("It's Friday", False, None),
+    ("the movie is on friday right", False, None),
+    ("Hey Freddie, open Instagram", True, "Hey Freddie, open Instagram"),  # name misheard: the phone heard it
+])
+def test_the_wake_word_must_be_said_to_friday(said, meant, rest):
+    ok, after = llm.addressed(said)
+    assert ok is meant
+    if meant:
+        assert after == rest
+
+
+def test_a_friday_in_passing_is_ignored_quietly(fake):
+    fake["transcript"] = "yeah see you on Friday then"
+    audio = base64.b64encode(b"RIFF....WAVE").decode()
+    data = client.post("/jarvis", json={"audio": audio, "wake": True}).json()
+    assert data["action"] == "ignore" and data["say"] == "" and "jarvis_input" not in fake
+
+
+def test_a_command_in_one_breath_is_heard_without_the_name(fake):
+    fake["transcript"] = "Hey Friday play Kesariya on Spotify"
+    audio = base64.b64encode(b"RIFF....WAVE").decode()
+    data = client.post("/jarvis", json={"audio": audio, "wake": True}).json()
+    assert data["action"] == "device" and data["task"]["kind"] == "play" and data["task"]["text"] == "kesariya"

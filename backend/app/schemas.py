@@ -194,11 +194,13 @@ class ComposeResponse(ComposeOutput):
 # ---------- Jarvis: "Hey Jarvis" + a spoken command ----------
 
 JarvisAction = Literal["write", "suggest", "read", "answer", "device", "end"]
+# "ignore": the wake word was only a word in a sentence ("see you on Friday"); stay quiet.
+JarvisReply = Literal["write", "suggest", "read", "answer", "device", "end", "ignore"]
 
 DeviceTaskKind = Literal[
     "none", "alarm", "timer", "open_app", "call", "message", "play", "navigate", "search",
     "flashlight", "battery", "phone", "settings", "volume", "note_add", "notes_read", "notes_clear", "send",
-    "scroll",
+    "scroll", "media",
 ]
 
 
@@ -216,7 +218,8 @@ class DeviceTask(BaseModel):
     target: str = Field(
         default="",
         description="phone: home, back, recents, notifications, quick_settings, lock, screenshot. "
-        "settings: wifi, bluetooth, internet, volume, display, battery. volume: mute or empty.",
+        "settings: wifi, bluetooth, internet, volume, display, battery. volume: mute or empty. "
+        "media: play, pause, next or previous.",
     )
 
 
@@ -257,6 +260,7 @@ class JarvisRequest(BaseModel):
     local_time: str | None = Field(default=None, max_length=60, description="The phone's time, e.g. 'Mon 13 Oct 2026, 8:30 pm'.")
     history: list[JarvisTurn] = Field(default_factory=list, max_length=6, description="Earlier in this conversation, oldest first.")
     notes: list[str] = Field(default_factory=list, max_length=30, description="My to-do list, kept on the phone.")
+    wake: bool = Field(default=False, description="Started by the wake word: the audio begins just before it.")
     profile: list[str] = Field(default_factory=list, max_length=80, description="What Friday knows about me, kept on the phone.")
     notifications_allowed: bool = False
     notifications: list[PhoneNotification] = Field(default_factory=list, max_length=40, description="Recent ones, newest first.")
@@ -282,7 +286,7 @@ class JarvisPlan(BaseModel):
 
 class JarvisResponse(BaseModel):
     heard: str
-    action: JarvisAction
+    action: JarvisReply
     say: str
     compose: ComposeResponse | None = None
     suggest: SuggestResponse | None = None

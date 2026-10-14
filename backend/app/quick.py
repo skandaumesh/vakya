@@ -117,6 +117,17 @@ def quick_plan(heard: str, local_time: str | None = None, history: list[JarvisTu
         up = word in ("up", "increase", "raise")
         return _plan(heard, f"Volume {'up' if up else 'down'}, boss.", kind="volume", on=up)
 
+    # The music already playing (works with the phone locked).
+    media = {
+        r"(?:pause|stop)(?: the| my)? (?:music|song|songs|track|spotify|playback|video)|pause(?: it)?": "pause",
+        r"(?:resume|continue|unpause)(?: the| my)?(?: music| song| playback| playing| spotify)?|play (?:the )?music again": "play",
+        r"(?:next|skip(?: the| this)?) (?:song|track)|play (?:the )?next (?:song|track)": "next",
+        r"(?:previous|last) (?:song|track)|play (?:the )?(?:previous|last) (?:song|track)|go back a (?:song|track)": "previous",
+    }
+    for pattern, target in media.items():
+        if re.fullmatch(pattern, t):
+            return _plan(heard, "Done, boss.", kind="media", target=target)
+
     if re.fullmatch(r"stop (?:scrolling|the scroll(?:ing)?|auto ?scroll(?:ing)?)", t):
         return _plan(heard, "Stopped, boss.", kind="scroll", target="stop")
     if m := re.fullmatch(r"(?:keep scrolling|auto ?scroll|scroll automatically|keep going)(?: every " + _NUMBER + r" seconds?)?", t):

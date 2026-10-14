@@ -25,8 +25,8 @@ android {
         applicationId = "com.onezerolabs.vakya"
         minSdk = 26
         targetSdk = 35
-        versionCode = 13
-        versionName = "0.7.0"
+        versionCode = 14
+        versionName = "0.8.0"
         // Debug builds talk to the laptop over USB (adb reverse); no key needed locally.
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"http://localhost:8000\"")
         buildConfigField("String", "APP_KEY", "\"\"")
@@ -103,6 +103,32 @@ if (!sherpaAar.exists()) {
     logger.lifecycle("Downloading $url")
     URI(url).toURL().openStream().use { input -> sherpaAar.outputStream().use { output -> input.copyTo(output) } }
 }
+
+// Friday's voice: "Jenny (Dioco)", an Irish woman's voice (Piper VITS, int8; free to use, credit
+// "Jenny (Dioco)") for sherpa-onnx's offline text-to-speech. Not in git: the first build downloads
+// it (21 MB) and keeps the model and the English pronunciation rules in app/voice/friday-voice.
+val voiceName = "vits-piper-en_GB-jenny_dioco-medium-int8"
+val voiceDir = file("voice/friday-voice")
+if (!voiceDir.resolve("model.onnx").exists()) {
+    val tarball = layout.buildDirectory.file("$voiceName.tar.bz2").get().asFile
+    tarball.parentFile.mkdirs()
+    val url = "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/$voiceName.tar.bz2"
+    logger.lifecycle("Downloading $url")
+    URI(url).toURL().openStream().use { input -> tarball.outputStream().use { output -> input.copyTo(output) } }
+    copy {
+        from(tarTree(resources.bzip2(tarball)))
+        include(
+            "$voiceName/en_GB-jenny_dioco-medium.onnx", "$voiceName/tokens.txt", "$voiceName/MODEL_CARD",
+            "$voiceName/espeak-ng-data/phon*", "$voiceName/espeak-ng-data/intonations",
+            "$voiceName/espeak-ng-data/en_dict", "$voiceName/espeak-ng-data/lang/gmw/en*",
+            "$voiceName/espeak-ng-data/voices/**",
+        )
+        eachFile { path = path.removePrefix("$voiceName/").replace("en_GB-jenny_dioco-medium.onnx", "model.onnx") }
+        includeEmptyDirs = false
+        into(voiceDir)
+    }
+}
+android.sourceSets.getByName("main").assets.srcDir("voice")
 
 dependencies {
     implementation(files(sherpaAar))

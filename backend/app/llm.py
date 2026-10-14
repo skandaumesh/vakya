@@ -341,10 +341,38 @@ async def transcribe(audio: bytes) -> str:
     return await provider.transcribe(audio)
 
 
+# "Friday" as said to her: at the start, maybe after "hey"/"ok", or right after another sentence.
+_CALLED = re.compile(
+    r"\b(?:(?:hey|hi|hay|ok|okay|hello|yo|oi)[\s,]+)?(?:friday|fri day|fry day|jarvis)\b[\s,.!?]*",
+    re.IGNORECASE,
+)
+
+
+_LEAD_IN = {"so", "um", "uh", "umm", "hmm", "oh", "and", "right", "alright", "listen", "excuse me", "please"}
+
+
+def addressed(said: str) -> tuple[bool, str]:
+    """Was Friday spoken to (not just "see you on Friday")? And what came after her name."""
+    for m in _CALLED.finditer(said):
+        before = said[: m.start()].strip()
+        if not before or before[-1] in ".!?" or before.lower().strip(" ,") in _LEAD_IN:
+            return True, said[m.end():].strip()
+    if _CALLED.search(said):
+        return False, said
+    # Speech-to-text missed the name: the phone heard it, so take it as meant.
+    return True, said
+
+
 async def jarvis(req: JarvisRequest, audio: bytes | None) -> JarvisResponse:
     """A spoken command: hear it, decide what to do, and do the chat part with the usual tools."""
     started = time.perf_counter()
     heard = req.text or (await transcribe(audio) if audio else "")
+    if req.wake:
+        # The audio starts just before the wake word, so check it was really said to Friday.
+        meant, heard = addressed(heard)
+        if not meant:
+            return JarvisResponse(heard="", action="ignore", say="",
+                                  latency_ms=int((time.perf_counter() - started) * 1000))
     heard = _WAKE_WORD.sub("", heard).strip()
     if not heard:
         return JarvisResponse(heard="", action="answer", say="I'm listening, boss. Say that again?",

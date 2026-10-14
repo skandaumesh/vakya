@@ -29,6 +29,9 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- "Keep Friday on when the phone is locked": asks to leave Vakya out of battery saving. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+
     <!-- "Open Instagram": the apps on the home screen, to find one by name. -->
     <queries>
         <intent>
@@ -54,6 +57,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Shows the unlock prompt when Friday is asked to open something on a locked phone. -->
+        <activity
+            android:name=".ui.UnlockActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
         <service
             android:name=".service.ChatReaderService"

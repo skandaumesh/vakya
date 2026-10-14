@@ -23,7 +23,9 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
+import android.os.SystemClock
 import com.replybot.R
+import com.replybot.data.DeviceTask
 import com.replybot.data.JarvisContext
 import com.replybot.data.JarvisResult
 import com.replybot.data.ReplyApi
@@ -69,12 +71,20 @@ class JarvisService : Service() {
         private const val FOLLOW_UP_CHUNKS = 70     // after an answer, 5.6 s to say something more
         private const val END_SILENCE_CHUNKS = 7    // 0.56 s of quiet after speaking: done
         private const val CHIME_CHUNKS = 2          // don't record the "listening" chime
+        private const val PRE_ROLL_CHUNKS = 20      // 1.6 s before the wake word goes with the command
+        // Tasks that need the screen: with the phone locked, ask to unlock first.
+        private val NEEDS_SCREEN = setOf("open_app", "play", "navigate", "search", "message", "scroll", "settings")
 
         @Volatile
         var running = false
             private set
 
         @Volatile private var instance: JarvisService? = null
+
+        /** The unlock prompt Friday asked for ([com.replybot.ui.UnlockActivity]) was answered. */
+        fun unlocked(ok: Boolean) {
+            instance?.let { it.main.post { it.afterUnlock(ok) } }
+        }
 
         /** New personal messages (from [NotificationWatcher]): say so, if the user wants that. */
         fun announce(items: List<NotificationLog.Item>) {
@@ -113,7 +123,14 @@ class JarvisService : Service() {
     private val device by lazy { DeviceActions(this) }
 
     // The command being recorded (audio thread only, after beginCommand sets it up).
-    private val command = ShortArray(MAX_COMMAND_CHUNKS * FridayWake.CHUNK)
+    private val command = ShortArray((MAX_COMMAND_CHUNKS + PRE_ROLL_CHUNKS) * FridayWake.CHUNK)
+    // The last moments before the wake word (mic thread), so "Hey Friday play Kesariya" said in one
+    // breath is heard whole, and the server can tell "Friday, ..." from "see you on Friday".
+    private val preRoll = ArrayDeque<ShortArray>()
+    /** This command began with the wake word (not "Talk now" or a follow-up). */
+    private var fromWake = false
+    /** A task waiting for the phone to be unlocked: what to do, what to say, and when it was asked. */
+    private var unlockWait: Triple<DeviceTask, String, Long>? = null
     private var commandLength = 0
     private var commandChunks = 0
     private var silentChunks = 0
@@ -365,6 +382,8 @@ class JarvisService : Service() {
         }
         when (state) {
             State.WAKE -> {
+                preRoll.addLast(chunk.copyOf())
+                if (preRoll.size > PRE_ROLL_CHUNKS) preRoll.removeFirst()
                 val heard = wake?.process(chunk) ?: return
                 if (check != null) {
                     recordCheck(chunk, heard)
@@ -375,7 +394,9 @@ class JarvisService : Service() {
                 if (heard) {
                     Log.i(TAG, "friday: wake word")
                     state = State.BUSY
-                    main.post { beginCommand() }
+                    val before = preRoll.toList()
+                    preRoll.clear()
+                    main.post { beginCommand(before = before) }
                 }
             }
             State.COMMAND -> {
@@ -394,11 +415,16 @@ class JarvisService : Service() {
 
     // ---------- The command ----------
 
-    private fun beginCommand(isFollowUp: Boolean = false) {
+    private fun beginCommand(isFollowUp: Boolean = false, before: List<ShortArray> = emptyList()) {
         if (state == State.COMMAND) return
         followUp = isFollowUp
         if (!isFollowUp) history.clear()
         commandLength = 0
+        for (c in before) {
+            c.copyInto(command, commandLength)
+            commandLength += c.size
+        }
+        fromWake = before.isNotEmpty()
         commandChunks = 0
         silentChunks = 0
         heardSpeech = false
@@ -417,7 +443,7 @@ class JarvisService : Service() {
         chunk.copyInto(command, commandLength)
         commandLength += chunk.size
         commandChunks++
-        if (level > maxOf(noise * 3, 500.0)) {
+        if (level > maxOf(noise * 3.5, 150.0)) {
             heardSpeech = true
             silentChunks = 0
         } else {
@@ -449,7 +475,8 @@ class JarvisService : Service() {
         val store = Store.get(this)
         val contact = context.chatKey?.let { store.contact(it) }
         val body = ReplyApi.jarvisBody(
-            audio = Wav.encode(pcm),
+            audio = Wav.encode(louder(pcm)),
+            wake = fromWake,
             context = context,
             relationship = contact?.relationship ?: contact?.guessedRelationship,
             styleCardJson = store.styleCardJson,
@@ -478,6 +505,13 @@ class JarvisService : Service() {
         result
             .onSuccess { r ->
                 Log.i(TAG, "jarvis: action=${r.action} task=${r.task?.kind}")
+                if (r.action == "ignore") {
+                    // "Friday" was only a word in a sentence: back to waiting, quietly.
+                    Log.i(TAG, "friday: not for me")
+                    a11y?.jarvisHudHide()
+                    resume()
+                    return@onSuccess
+                }
                 if (r.remember.isNotEmpty() || r.forget.isNotEmpty()) {
                     Store.get(this).updateProfile(r.remember, r.forget)
                     Log.i(TAG, "friday: knows ${r.remember.size} new, forgot ${r.forget.size}")
@@ -486,10 +520,12 @@ class JarvisService : Service() {
                 conversationOver = r.action == "end"
                 if (r.action == "end") a11y?.stopAutoScroll()
                 val locked = getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
-                if (r.action == "device" && r.task != null && locked &&
-                    r.task.kind in setOf("open_app", "play", "navigate", "search", "message", "call", "scroll", "settings")
-                ) {
-                    say = "Unlock your phone first, boss, then ask me again."
+                if (r.action == "device" && r.task != null && locked && r.task.kind in NEEDS_SCREEN) {
+                    // Apps can't open over the lock screen: ask to unlock, then carry on.
+                    unlockWait = Triple(r.task, say, SystemClock.elapsedRealtime())
+                    say = "Unlock your phone, boss, and I'll do it."
+                    conversationOver = true
+                    askToUnlock()
                 } else if (r.action == "device" && r.task != null) {
                     if (r.task.kind == "phone" && r.task.target == "screenshot") {
                         // Out of the picture first.
@@ -526,6 +562,42 @@ class JarvisService : Service() {
                 a11y?.jarvisHud("Friday", sorry)
                 speak(sorry)
             }
+    }
+
+    private fun askToUnlock() {
+        val from: Context = ChatReaderService.running ?: this
+        runCatching {
+            from.startActivity(Intent(from, com.replybot.ui.UnlockActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        }.onFailure { Log.w(TAG, "friday: can't ask to unlock (${it.javaClass.simpleName})") }
+    }
+
+    private fun afterUnlock(ok: Boolean) {
+        val (task, said, at) = unlockWait ?: return
+        unlockWait = null
+        Log.i(TAG, "friday: unlocked=$ok")
+        if (!ok || SystemClock.elapsedRealtime() - at > 60_000L) return
+        // A moment for the lock screen to go, then do what was asked.
+        main.postDelayed({
+            val a11y = ChatReaderService.running
+            val before = a11y?.foregroundPackage()
+            val say = device.run(task) ?: said
+            checkOpened(task.kind, before)
+            if (state == State.WAKE) {
+                state = State.BUSY
+                conversationOver = true
+                a11y?.jarvisHud("Friday", say)
+                speak(say)
+            }
+        }, 500)
+    }
+
+    /** Quiet mics: bring the command up to a normal loudness for speech-to-text. */
+    private fun louder(pcm: ShortArray): ShortArray {
+        var peak = 1
+        for (s in pcm) peak = maxOf(peak, kotlin.math.abs(s.toInt()))
+        val gain = (20_000f / peak).coerceIn(1f, 8f)
+        if (gain < 1.1f) return pcm
+        return ShortArray(pcm.size) { (pcm[it] * gain).toInt().coerceIn(-32768, 32767).toShort() }
     }
 
     private var lastBlockedHint = 0L

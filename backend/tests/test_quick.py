@@ -95,3 +95,23 @@ def test_open_a_persons_chat(said, who, app):
 def test_scrolling(said, on, seconds, target):
     plan = quick_plan(said, NIGHT)
     assert plan.task.kind == "scroll" and plan.task.on is on and plan.task.seconds == seconds and plan.task.target == target
+
+
+@pytest.mark.parametrize("said, target", [
+    ("pause the music", "pause"),
+    ("stop the song", "pause"),
+    ("pause", "pause"),
+    ("resume", "play"),
+    ("continue the music", "play"),
+    ("next song", "next"),
+    ("skip this song", "next"),
+    ("previous song", "previous"),
+])
+def test_the_music_already_playing(said, target):
+    plan = quick_plan(said, NIGHT)
+    assert plan.task.kind == "media" and plan.task.target == target
+
+
+def test_next_alone_is_still_the_next_reel():
+    assert quick_plan("next", NIGHT).task.kind == "scroll"
+    assert quick_plan("stop", NIGHT).action == "end"

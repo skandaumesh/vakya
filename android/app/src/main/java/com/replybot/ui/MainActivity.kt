@@ -39,6 +39,7 @@ import com.replybot.data.Store
 import com.replybot.importer.ChatExportParser
 import com.replybot.service.ChatReaderService
 import com.replybot.jarvis.JarvisService
+import com.replybot.jarvis.JarvisVoice
 import com.replybot.jarvis.NotificationWatcher
 import com.replybot.jarvis.NotificationLog
 import com.replybot.jarvis.Habits
@@ -57,6 +58,8 @@ class MainActivity : Activity() {
     private lateinit var serviceStatus: TextView
     private lateinit var jarvisToggle: CheckBox
     private lateinit var fridayAccess: TextView
+    /** For "Hear her": made on first use (loading the voice takes a moment). */
+    private var previewVoice: JarvisVoice? = null
     private lateinit var factsBox: LinearLayout
     private var talkAfterPermission = false
     private lateinit var restrictedHelp: LinearLayout
@@ -200,6 +203,14 @@ class MainActivity : Activity() {
                     toast("Also allow \"Display pop-up windows while running in the background\" if your phone has it")
                 }
             })
+            addView(glassCheckBox("Irish voice, like FRIDAY in the films (\"Jenny\", made on this phone)", store.fridayVoice == JarvisVoice.JENNY) { checked ->
+                store.fridayVoice = if (checked) JarvisVoice.JENNY else JarvisVoice.PHONE
+            })
+            addView(glassButton("Hear her", primary = false) {
+                val v = previewVoice ?: JarvisVoice(this@MainActivity).also { previewVoice = it }
+                v.preview("Hi boss, I'm Friday. What do you need?")
+            })
+            addView(glassButton("Keep Friday on when the phone is locked", primary = false) { keepFridayOn() })
             addView(glassButton("Let Friday see notifications", primary = false) { askNotificationAccess() })
             addView(glassCheckBox("Tell me when a message comes (\"Message from Rahul. Shall I read it?\")", store.announceMessages) { checked ->
                 store.announceMessages = checked
@@ -220,7 +231,9 @@ class MainActivity : Activity() {
                 "Listening for \"Hey Friday\" happens on this phone: nothing is sent until you say it. " +
                     "Then the next few seconds go to Groq to turn into text, and on to the Vakya server. " +
                     "A notification shows while Friday listens, and it uses some battery. " +
-                    "Wake word by sherpa-onnx.",
+                    "With the phone locked she still listens and answers, controls music and reads your messages; " +
+                    "to open an app she asks you to unlock first. " +
+                    "Wake word and voice by sherpa-onnx; voice: \"Jenny (Dioco)\".",
                 12f, muted = true,
             ))
         }
@@ -448,6 +461,7 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
+        previewVoice?.shutdown()
         io.shutdownNow()
         super.onDestroy()
     }
@@ -569,6 +583,19 @@ class MainActivity : Activity() {
                 }
             })
         }
+    }
+
+    /** Battery savers (vivo, Xiaomi, Oppo...) stop background apps after a while: ask to leave Vakya alone. */
+    private fun keepFridayOn() {
+        val power = getSystemService(android.os.PowerManager::class.java)
+        if (power?.isIgnoringBatteryOptimizations(packageName) != true) {
+            val asked = runCatching {
+                startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+            }.isSuccess
+            if (asked) return
+        }
+        startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+        toast("Battery → set Vakya to \"Unrestricted\" (on vivo: allow \"High background power consumption\").")
     }
 
     /** Prominent disclosure, then Android's Notification access page. */

@@ -18,6 +18,7 @@ import android.provider.ContactsContract
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Log
+import android.view.KeyEvent
 import com.replybot.data.DeviceTask
 import com.replybot.data.Store
 import com.replybot.service.ChatReaderService
@@ -53,6 +54,7 @@ class DeviceActions(private val context: Context) {
             "note_add" -> { store.addNote(task.text); null }
             "notes_clear" -> { store.clearNotes(); null }
             "scroll" -> scroll(task)
+            "media" -> media(task.target)
             "send" -> if (ChatReaderService.running?.jarvisSend() == true) null else "I couldn't find the send button, boss. Tap it for me?"
             else -> null
         }
@@ -213,6 +215,21 @@ class DeviceActions(private val context: Context) {
         if (!has(pkg)) return "That app isn't on your phone, boss."
         if (!launch(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg))) return "I couldn't open it, boss."
         ChatReaderService.running?.jarvisTapResult(q, pkg)
+        return null
+    }
+
+    /** The music or video already playing: works with the phone locked, like headphone buttons. */
+    private fun media(target: String): String? {
+        val code = when (target) {
+            "pause" -> KeyEvent.KEYCODE_MEDIA_PAUSE
+            "play" -> KeyEvent.KEYCODE_MEDIA_PLAY
+            "next" -> KeyEvent.KEYCODE_MEDIA_NEXT
+            "previous" -> KeyEvent.KEYCODE_MEDIA_PREVIOUS
+            else -> return "Play, pause, next or previous, boss?"
+        }
+        val audio = context.getSystemService(AudioManager::class.java) ?: return "I couldn't reach the music, boss."
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, code))
+        audio.dispatchMediaKeyEvent(KeyEvent(KeyEvent.ACTION_UP, code))
         return null
     }
 

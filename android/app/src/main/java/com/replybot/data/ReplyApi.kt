@@ -138,7 +138,9 @@ class ReplyApi(
             profile: List<String> = emptyList(),
             notificationsAllowed: Boolean = false,
             notifications: List<com.replybot.jarvis.NotificationLog.Item> = emptyList(),
+            wake: Boolean = false,
         ): JSONObject = JSONObject()
+            .put("wake", wake)
             .put("profile", JSONArray(profile.takeLast(80)))
             .put("notifications_allowed", notificationsAllowed)
             .put("notifications", JSONArray(notifications.take(30).map {
