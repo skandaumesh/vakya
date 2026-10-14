@@ -227,6 +227,15 @@ class JarvisTurn(BaseModel):
     say: str = Field(max_length=500)
 
 
+class PhoneNotification(BaseModel):
+    """A notification the phone showed. Kept on the phone; never stored here."""
+
+    app: str = Field(max_length=40)
+    who: str = Field(default="", max_length=100, description="Sender or title, e.g. 'Rahul' or 'College gang: Amit'.")
+    text: str = Field(default="", max_length=400)
+    when: str = Field(default="", max_length=30, description="e.g. '5 min ago', '2:14 pm', 'yesterday 9:30 pm'.")
+
+
 class JarvisRequest(BaseModel):
     """A voice command (said after "Hey Jarvis") and what's on the phone's screen."""
 
@@ -248,6 +257,10 @@ class JarvisRequest(BaseModel):
     local_time: str | None = Field(default=None, max_length=60, description="The phone's time, e.g. 'Mon 13 Oct 2026, 8:30 pm'.")
     history: list[JarvisTurn] = Field(default_factory=list, max_length=6, description="Earlier in this conversation, oldest first.")
     notes: list[str] = Field(default_factory=list, max_length=30, description="My to-do list, kept on the phone.")
+    profile: list[str] = Field(default_factory=list, max_length=80, description="What Friday knows about me, kept on the phone.")
+    notifications_allowed: bool = False
+    notifications: list[PhoneNotification] = Field(default_factory=list, max_length=40, description="Recent ones, newest first.")
+    habits: str | None = Field(default=None, max_length=3000, description="How I use the phone, from Android's usage stats.")
 
 
 class JarvisPlan(BaseModel):
@@ -258,6 +271,13 @@ class JarvisPlan(BaseModel):
     intent: str = Field(default="", description="write: what to write, in my words. Else empty.")
     task: DeviceTask = Field(default_factory=DeviceTask, description="device: what to do on the phone. Else kind none.")
     say: str = Field(description="Jarvis's spoken answer: 1-2 short sentences.")
+    remember: list[str] = Field(
+        default_factory=list,
+        description="New lasting facts about me to keep, each a short note like 'Name: Skanda'. Usually empty.",
+    )
+    forget: list[str] = Field(
+        default_factory=list, description="Lines from <about_boss> to delete because I asked. Usually empty."
+    )
 
 
 class JarvisResponse(BaseModel):
@@ -267,4 +287,6 @@ class JarvisResponse(BaseModel):
     compose: ComposeResponse | None = None
     suggest: SuggestResponse | None = None
     task: DeviceTask | None = None
+    remember: list[str] = Field(default_factory=list)
+    forget: list[str] = Field(default_factory=list)
     latency_ms: int

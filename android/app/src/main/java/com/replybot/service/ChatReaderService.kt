@@ -20,6 +20,7 @@ import com.replybot.data.NON_FRIEND
 import com.replybot.data.ReplyApi
 import com.replybot.data.Store
 import com.replybot.data.Suggestion
+import com.replybot.jarvis.ResultPicker
 import com.replybot.offline.QuickReplies
 import java.util.concurrent.Executors
 
@@ -392,48 +393,74 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     fun foregroundPackage(): String? = rootInActiveWindow?.packageName?.toString()
 
     /**
-     * "Play X": once [pkg] shows its search results, tap the top match for [query] (or Spotify's
-     * play button when no row matches). Tries for ~7 s while the results load; only taps something
-     * whose words match what was asked for.
+     * "Play X": once [pkg] shows its search results, tap the row that matches [query]: a whole
+     * result row, never a row's small buttons or the player bar at the bottom (that one plays
+     * whatever was on before). Waits until the same row is best on two looks in a row, so the
+     * results have finished loading. Tries for ~10 s.
      */
-    fun jarvisTapResult(query: String, pkg: String, preferPlay: Boolean, attempts: Int = 14) {
+    fun jarvisTapResult(query: String, pkg: String, tries: Int = 0, last: String? = null) {
         val root = rootInActiveWindow
+        var seen: String? = null
         if (root != null && root.packageName?.toString() == pkg) {
-            val target = findResult(root, query, preferPlay)
-            if (target != null && click(target)) {
+            val rows = resultRows(root)
+            val pick = ResultPicker.pick(rows.map { it.first }, query, waited = tries >= 6)
+            seen = pick?.text
+            if (pick != null && seen == last && click(rows.first { it.first === pick }.second)) {
                 Log.i("Vakya", "friday: played a result in $pkg")
+                main.postDelayed({ pressPlayIfQuiet(pkg) }, 2500)
                 return
             }
         }
-        if (attempts > 0) main.postDelayed({ jarvisTapResult(query, pkg, preferPlay, attempts - 1) }, 500)
+        if (tries < 20) main.postDelayed({ jarvisTapResult(query, pkg, tries + 1, seen) }, 500)
+        else Log.w("Vakya", "friday: found nothing to play in $pkg")
     }
 
-    private fun findResult(root: AccessibilityNodeInfo, query: String, preferPlay: Boolean): AccessibilityNodeInfo? {
-        val split = Regex("[^\\p{L}0-9]+")
-        val words = query.lowercase().split(split).filter { it.length > 1 }.toSet()
-        if (words.isEmpty()) return null
+    /** The results list: wide, tappable rows between the search box and the player bar, with their words. */
+    private fun resultRows(root: AccessibilityNodeInfo): List<Pair<ResultPicker.Row, AccessibilityNodeInfo>> {
         val screen = ChatReader.bounds(root)
-        val below = screen.top + screen.height() * 0.14  // under the search box
-        var best: AccessibilityNodeInfo? = null
-        var bestScore = 0
-        var bestTop = Int.MAX_VALUE
+        val top = screen.top + screen.height() * 0.12
+        val bottom = screen.top + screen.height() * 0.85
+        val rows = mutableListOf<Pair<ResultPicker.Row, AccessibilityNodeInfo>>()
+        walk(root) { n ->
+            if (!n.isClickable || !n.isVisibleToUser || n.isEditable) return@walk
+            val r = ChatReader.bounds(n)
+            if (r.top < top || r.top > bottom || r.width() < screen.width() * 0.6) return@walk
+            val text = rowText(n)
+            if (text.isNotBlank()) rows += ResultPicker.Row(r.top, text) to n
+        }
+        return rows
+    }
+
+    /** A row's own words: its label and the text inside it, not its buttons' ("Add to library"...). */
+    private fun rowText(row: AccessibilityNodeInfo): String {
+        val parts = mutableListOf<String>()
+        row.contentDescription?.let { parts += it.toString() }
+        val queue = ArrayDeque<AccessibilityNodeInfo>()
+        for (i in 0 until row.childCount) row.getChild(i)?.let(queue::addLast)
+        var seen = 0
+        while (queue.isNotEmpty() && seen++ < 60) {
+            val n = queue.removeFirst()
+            if (n.isClickable) continue
+            n.text?.let { parts += it.toString() }
+            for (i in 0 until n.childCount) n.getChild(i)?.let(queue::addLast)
+        }
+        return parts.joinToString("\n")
+    }
+
+    /** Tapped a result but nothing plays (an album or artist page opened): press that page's own Play. */
+    private fun pressPlayIfQuiet(pkg: String) {
+        if (getSystemService(android.media.AudioManager::class.java)?.isMusicActive == true) return
+        val root = rootInActiveWindow ?: return
+        if (root.packageName?.toString() != pkg) return
+        val screen = ChatReader.bounds(root)
+        val above = screen.top + screen.height() * 0.7  // not the player bar at the bottom
         var play: AccessibilityNodeInfo? = null
         walk(root) { n ->
-            if (!n.isVisibleToUser || n.isEditable) return@walk
-            val r = ChatReader.bounds(n)
-            if (r.top < below) return@walk
-            val label = (n.contentDescription ?: n.text)?.toString()?.lowercase().orEmpty()
-            if (label.isEmpty()) return@walk
-            if (preferPlay && play == null && Regex("^play\\b").containsMatchIn(label) && !label.startsWith("playlist")) play = n
-            val have = label.split(split).toSet()
-            val score = words.count { it in have }
-            if (score > bestScore || (score == bestScore && score > 0 && r.top < bestTop)) {
-                best = n
-                bestScore = score
-                bestTop = r.top
-            }
+            if (play != null || !n.isVisibleToUser || ChatReader.bounds(n).top > above) return@walk
+            val label = (n.contentDescription ?: n.text)?.toString()?.trim()?.lowercase().orEmpty()
+            if (Regex("^play\\b").containsMatchIn(label) && !label.startsWith("playlist")) play = n
         }
-        return best?.takeIf { bestScore * 2 >= words.size } ?: play
+        play?.let { if (click(it)) Log.i("Vakya", "friday: pressed play in $pkg") }
     }
 
     /** "Next reel": swipe up like a finger (or scroll the biggest list back/forward). */

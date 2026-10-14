@@ -164,3 +164,58 @@ def test_simple_commands_skip_the_model(fake):
     data = client.post("/jarvis", json={"text": "Hey Friday, set an alarm for 6", "local_time": "Tue 14 Oct 2026, 9:40 pm"}).json()
     assert data["task"]["kind"] == "alarm" and data["task"]["time"] == "06:00"
     assert fake["calls"] == []  # no model call at all
+
+
+NOTIFS = {
+    "notifications_allowed": True,
+    "notifications": [
+        {"app": "WhatsApp", "who": "Rahul", "text": "bro movie at 6?", "when": "5 min ago"},
+        {"app": "Gmail", "who": "HDFC Bank", "text": "Your statement is ready", "when": "1:10 pm"},
+    ],
+    "habits": "today so far: Instagram 1 h 20 min, WhatsApp 35 min",
+    "profile": ["Name: Skanda", "Works at OneZeroLabs"],
+}
+
+
+def _input(heard, **extra):
+    return render_jarvis_input(JarvisRequest(text=heard, **{**NOTIFS, **extra}), heard)
+
+
+def test_notifications_go_to_the_model_only_when_asked_about():
+    assert "bro movie at 6?" in _input("any new messages?")
+    assert "bro movie at 6?" in _input("what did Rahul want")  # a sender's name
+    assert "<notifications>" not in _input("what's 15 percent of 2400")
+    assert "<notifications>access is off" in _input("read my notifications", notifications_allowed=False)
+    assert "none in the last twelve hours" in _input("any messages?", notifications=[])
+
+
+def test_an_announced_message_can_be_read_with_yes():
+    turn = [{"heard": "", "say": "Message from Rahul on WhatsApp. Shall I read it?"}]
+    assert "bro movie at 6?" in _input("yes", history=turn)
+
+
+def test_phone_habits_only_for_questions_about_my_day():
+    assert "Instagram 1 h 20 min" in _input("how long was I on Instagram today?")
+    assert "<phone_habits>" not in _input("tell me a joke")
+    assert "<phone_habits>\naccess is off" in _input("what's my screen time", habits=None)
+
+
+def test_friday_always_knows_who_i_am():
+    assert '"Name: Skanda"' in _input("tell me a joke")
+    assert "<about_boss>nothing yet</about_boss>" in _input("what's my name", profile=[])
+
+
+def test_new_facts_are_remembered_once_and_only_known_ones_forgotten(fake):
+    fake["plan"] = JarvisPlan(heard="I go to the gym at 6", action="answer", say="Noted, Skanda.",
+                              remember=["Gym at 6 am", "gym at 6 am", "Name: Skanda", ""],
+                              forget=["works at onezerolabs", "Something I never said"])
+    r = client.post("/jarvis", json={**NOTIFS, "text": "remember I go to the gym at 6 and forget where I work"})
+    data = r.json()
+    assert data["remember"] == ["Gym at 6 am"]
+    assert data["forget"] == ["Works at OneZeroLabs"]
+
+
+def test_messages_outside_a_chat_are_read_from_notifications(fake):
+    fake["plan"] = JarvisPlan(heard="what did Rahul send", action="read", say="Rahul asked if the movie's at six, boss.")
+    data = client.post("/jarvis", json={**NOTIFS, "text": "what did Rahul send"}).json()
+    assert data["action"] == "answer" and data["say"] == "Rahul asked if the movie's at six, boss."

@@ -39,6 +39,9 @@ import com.replybot.data.Store
 import com.replybot.importer.ChatExportParser
 import com.replybot.service.ChatReaderService
 import com.replybot.jarvis.JarvisService
+import com.replybot.jarvis.NotificationWatcher
+import com.replybot.jarvis.NotificationLog
+import com.replybot.jarvis.Habits
 import com.replybot.service.PanelTheme
 import org.json.JSONObject
 import java.util.concurrent.Executors
@@ -53,6 +56,8 @@ class MainActivity : Activity() {
 
     private lateinit var serviceStatus: TextView
     private lateinit var jarvisToggle: CheckBox
+    private lateinit var fridayAccess: TextView
+    private lateinit var factsBox: LinearLayout
     private var talkAfterPermission = false
     private lateinit var restrictedHelp: LinearLayout
     private lateinit var serverStatus: TextView
@@ -172,6 +177,8 @@ class MainActivity : Activity() {
                     "\"remind me in 20 minutes to call Amma\", \"open Instagram\", \"call Amma\", " +
                     "\"message Rahul I'm on my way\", \"play Kesariya\", \"turn on the flashlight\", " +
                     "\"add milk to my list\", or ask anything. After it answers, just keep talking; say \"thanks\" when you're done. " +
+                    "With the switches below she can also tell you \"any new messages?\", \"what did Rahul send?\" and " +
+                    "\"how long was I on Instagram today?\". " +
                     "Friday only sends a message after asking you and hearing \"yes\".",
                 14f,
             ))
@@ -182,10 +189,28 @@ class MainActivity : Activity() {
             addView(glassButton("Allow contacts (for \"call Amma\", \"message Rahul\")", primary = false) {
                 requestPermissions(arrayOf(Manifest.permission.READ_CONTACTS, Manifest.permission.CALL_PHONE), REQUEST_CONTACTS)
             })
-            addView(glassButton("Let Friday open apps (vivo, Xiaomi, Oppo…)", primary = false) {
-                // These phones have their own switch for opening apps from the background.
-                startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
-                toast("Permissions → \"Display pop-up windows while running in the background\" (or \"Open apps in background\") → Allow")
+            addView(glassButton("Let Friday open apps", primary = false) {
+                // "Display over other apps" lets Friday open an app from the background; vivo,
+                // Xiaomi and Oppo also have their own background pop-up switch in the app's info.
+                if (!Settings.canDrawOverlays(this@MainActivity)) {
+                    startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                    toast("Turn on \"Allow display over other apps\" for Vakya")
+                } else {
+                    startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.fromParts("package", packageName, null)))
+                    toast("Also allow \"Display pop-up windows while running in the background\" if your phone has it")
+                }
+            })
+            addView(glassButton("Let Friday see notifications", primary = false) { askNotificationAccess() })
+            addView(glassCheckBox("Tell me when a message comes (\"Message from Rahul. Shall I read it?\")", store.announceMessages) { checked ->
+                store.announceMessages = checked
+                if (checked && !NotificationWatcher.allowed(this@MainActivity)) askNotificationAccess()
+            })
+            addView(glassButton("Let Friday learn my day (app usage)", primary = false) { askUsageAccess() })
+            fridayAccess = text("", 13f, muted = true)
+            addView(fridayAccess)
+            addView(glassButton("Test \"Hey Friday\" (say it 3 times)", primary = false) {
+                if (micAllowed() && store.jarvisOn) JarvisService.start(this@MainActivity, JarvisService.ACTION_CHECK)
+                else toast("Turn on \"Listen for Hey Friday\" first.")
             })
             addView(glassButton("Talk to Friday now", primary = false) {
                 if (micAllowed()) JarvisService.start(this@MainActivity, JarvisService.ACTION_TALK)
@@ -201,6 +226,38 @@ class MainActivity : Activity() {
         }
         col.addView(jarvisCard)
 
+        // What Friday knows about the user: everything she keeps, deletable.
+        val aboutCard = glassCard().apply {
+            addView(cardHeading("What Friday knows", "ABOUT YOU"))
+            addView(text(
+                "Tell her things like \"my name is Skanda\", \"I work at OneZeroLabs\" or \"remember I go to the gym at 6\", " +
+                    "and she keeps them here, on this phone, to answer like someone who knows you. " +
+                    "Say \"forget that\", or long-press one to delete it.",
+                14f,
+            ))
+            factsBox = LinearLayout(this@MainActivity).apply { orientation = LinearLayout.VERTICAL }
+            addView(factsBox)
+            val factInput = glassInput("Add one yourself, e.g. Name: Skanda")
+            addView(factInput)
+            addView(glassButton("Add", primary = false) {
+                val fact = factInput.text.toString().trim()
+                if (fact.isNotEmpty()) {
+                    store.updateProfile(listOf(fact))
+                    factInput.setText("")
+                    renderFriday()
+                }
+            })
+            addView(text("Clear what Friday saw in notifications", 13f).apply {
+                setTextColor(c.link)
+                setPadding(0, px(12), 0, px(4))
+                setOnClickListener {
+                    NotificationLog.get(this@MainActivity).clear()
+                    toast("Cleared. Friday keeps only notifications that come from now on.")
+                }
+            })
+        }
+        col.addView(aboutCard)
+
         // Privacy, right where people decide to switch Vakya on. Every line must stay true:
         // check the server's logging, the accessibility scope and the AI providers before editing.
         val privacyCard = glassCard().apply {
@@ -209,9 +266,8 @@ class MainActivity : Activity() {
                 "• Nobody at Vakya reads your chats. The server writes your replies and forgets the messages " +
                     "straight away: it never saves or logs them. The code is public, so anyone can check: " +
                     "github.com/skandaumesh/vakya\n\n" +
-                    "• Vakya only works in the chat apps you tick below (WhatsApp, until you choose). Android " +
-                    "doesn't tell it about any other app, and it never reads anything else: not your bank, " +
-                    "photos or passwords.\n\n" +
+                    "• Vakya's bubble only works in the chat apps you tick below (WhatsApp, until you choose). " +
+                    "It never reads any other app's screen: not your bank, photos or passwords.\n\n" +
                     "• It reads a chat only when you tap the bubble, and it never sends a message for you. " +
                     "(With \"Learn from messages I send\" on, it also keeps what you send, on this phone only.)\n\n" +
                     "• Your style, saved replies and notes stay on this phone. They aren't backed up anywhere, and " +
@@ -225,6 +281,10 @@ class MainActivity : Activity() {
                     "For calls and messages it looks names up in your contacts on this phone; contacts are never sent anywhere. " +
                     "When you ask her to play a song or scroll, she looks at that app's screen just then to press play or swipe; " +
                     "nothing from it is saved or sent.\n\n" +
+                    "• If you let Friday see notifications, she keeps the last day of them on this phone (never OTPs or " +
+                    "codes), and they go to the AI only when you ask her about your messages. With \"Learn my day\" she " +
+                    "adds up your app-usage times on this phone, and they go to the AI only when you ask about your day. " +
+                    "What she knows about you is listed in the app, and you can delete any of it.\n\n" +
                     "• Don't use Vakya on chats with OTPs, passwords or bank details.",
                 14f,
             ))
@@ -400,6 +460,7 @@ class MainActivity : Activity() {
             "Off. Vakya needs the Accessibility permission to read the chat on screen and type your reply."
         }
         restrictedHelp.visibility = if (!on && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) View.VISIBLE else View.GONE
+        renderFriday()
         renderStyle()
         renderContacts()
     }
@@ -487,6 +548,76 @@ class MainActivity : Activity() {
         store.jarvisOn = true
         JarvisService.start(this)
         toast("Friday is listening. Say \"Hey Friday\".")
+    }
+
+    private fun renderFriday() {
+        val notifications = NotificationWatcher.allowed(this)
+        val usage = Habits.allowed(this)
+        fridayAccess.text = "Notifications: ${if (notifications) "✅ on" else "off"}    ·    Your day: ${if (usage) "✅ on" else "off"}"
+        factsBox.removeAllViews()
+        val facts = store.profile
+        if (facts.isEmpty()) factsBox.addView(text("Nothing yet.", 13f, muted = true))
+        facts.forEach { fact ->
+            factsBox.addView(text("• $fact", 14f).apply {
+                setOnLongClickListener {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setMessage("Forget \"$fact\"?")
+                        .setPositiveButton("Forget") { _, _ -> store.updateProfile(emptyList(), listOf(fact)); renderFriday() }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                    true
+                }
+            })
+        }
+    }
+
+    /** Prominent disclosure, then Android's Notification access page. */
+    private fun askNotificationAccess() {
+        if (NotificationWatcher.allowed(this)) {
+            toast("Friday can already see notifications. Switch it off in Settings → Notification access.")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Let Friday see notifications?")
+            .setMessage(
+                "Friday will see the notifications on this phone (messages, emails, missed calls), so you can ask " +
+                    "\"any new messages?\" and she can tell you when one comes.\n\n" +
+                    "She keeps the last day of them on this phone only, and never keeps OTPs or codes. " +
+                    "They go to the AI only when you ask her about your messages. You can switch this off any time."
+            )
+            .setPositiveButton("Agree and continue") { _, _ ->
+                val me = ComponentName(this, NotificationWatcher::class.java).flattenToString()
+                val direct = if (Build.VERSION.SDK_INT >= 30) {
+                    Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS)
+                        .putExtra(Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME, me)
+                } else null
+                val opened = direct != null && runCatching { startActivity(direct) }.isSuccess
+                if (!opened) startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                toast("Turn on Vakya. If it says \"Restricted setting\", allow restricted settings for Vakya first (App info → ⋮).")
+            }
+            .setNegativeButton("Not now", null)
+            .show()
+    }
+
+    private fun askUsageAccess() {
+        if (Habits.allowed(this)) {
+            toast("Friday can already see your app usage. Switch it off in Settings → Usage access.")
+            return
+        }
+        AlertDialog.Builder(this)
+            .setTitle("Let Friday learn your day?")
+            .setMessage(
+                "Friday will see which apps you use, when, and for how long (Android's screen-time numbers, " +
+                    "nothing inside the apps), so you can ask \"how long was I on Instagram today?\" or " +
+                    "\"what do I usually do at night?\".\n\nIt's worked out on this phone, and goes to the AI only " +
+                    "when you ask her about your day."
+            )
+            .setPositiveButton("Agree and continue") { _, _ ->
+                runCatching { startActivity(Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)) }
+                toast("Find Vakya and turn on \"Permit usage access\".")
+            }
+            .setNegativeButton("Not now", null)
+            .show()
     }
 
     private fun turnOffJarvis() {

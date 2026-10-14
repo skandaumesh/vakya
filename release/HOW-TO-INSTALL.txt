@@ -26,7 +26,7 @@ Is it private?
    a. Pause Play Protect for a minute:
       Play Store → your profile picture → Play Protect → ⚙ (top right) →
       turn OFF "Scan apps with Play Protect".
-   b. Open Vakya-0.6.2.apk → Install.
+   b. Open Vakya-0.7.0.apk → Install.
       (If it says "install unknown apps is blocked", tap Settings, allow it
       for WhatsApp/Files, and go back.)
    c. Turn "Scan apps with Play Protect" back ON straight away.
@@ -75,10 +75,21 @@ Hey Friday (optional voice assistant)
      "take a screenshot", "add milk to my list", "next reel", "keep scrolling".
      For calls and messages by
      name, tap "Allow contacts" in Vakya (contacts never leave your phone).
-   - Phone won't let her open apps (vivo, Xiaomi, Oppo)? In Vakya tap "Let Friday
-     open apps" and allow "Display pop-up windows while running in the background".
+   - So she can open apps while you're in another app: in Vakya tap "Let Friday
+     open apps" and turn on "Allow display over other apps" (on vivo, Xiaomi and
+     Oppo also allow "Display pop-up windows while running in the background").
    - After she answers, just keep talking: no need to say "Hey Friday" again.
      Say "thanks" (or stay quiet) when you're done.
+   - Messages and notifications: tap "Let Friday see notifications" and turn
+     on Vakya (if it says "Restricted setting", first open Settings → Apps →
+     Vakya → ⋮ → Allow restricted settings). Then ask "any new messages?" or
+     "what did Rahul send?". Tick "Tell me when a message comes" and she says
+     "Message from Rahul. Shall I read it?" (not on silent or in a call).
+   - Your day: tap "Let Friday learn my day" and turn on "Permit usage access"
+     for Vakya. Then ask "how long was I on Instagram today?".
+   - Tell her about yourself ("my name is ...", "I work at ...", "remember I go
+     to the gym at 6"). Everything she knows is listed in Vakya under "What
+     Friday knows", on your phone only; long-press one to delete it.
    - She listens for her name on your phone only; just what you say after
      "Hey Friday" is sent to be understood. A notification shows while it's on,
      and it uses some battery. Untick it to turn it off.

@@ -19,6 +19,7 @@ from .prompts import (
     is_idea_request,
     render_compose_input,
     render_jarvis_input,
+    wants_notifications,
     render_style_input,
     render_suggest_input,
     strip_slurs,
@@ -367,8 +368,11 @@ async def _jarvis(req: JarvisRequest, heard: str, started: float) -> JarvisRespo
             plan, _ = await _parse(JARVIS_SYSTEM, jarvis_input, JarvisPlan, max_tokens=800, prefer=config.KANGLISH_PROVIDER)
     say = strip_slurs(plan.say.strip()) or "Done, boss."
     action = plan.action
+    if action == "read" and not req.in_chat and req.notifications_allowed and wants_notifications(req, heard):
+        action = "answer"  # read from the notifications instead
     if action in ("write", "suggest", "read") and not req.in_chat:
         action, say = "answer", "Open the chat first, boss, then ask me again."
+    remember, forget = _profile_changes(plan, req)
 
     context = dict(
         app=req.app, chat_title=req.chat_title, is_group=req.is_group, messages=req.messages,
@@ -393,5 +397,18 @@ async def _jarvis(req: JarvisRequest, heard: str, started: float) -> JarvisRespo
             action, say = "answer", "Nothing to reply to yet, boss."
     return JarvisResponse(
         heard=plan.heard or heard, action=action, say=say, compose=compose, suggest=suggest, task=task,
-        latency_ms=int((time.perf_counter() - started) * 1000),
+        remember=remember, forget=forget, latency_ms=int((time.perf_counter() - started) * 1000),
     )
+
+
+def _profile_changes(plan: JarvisPlan, req: JarvisRequest) -> tuple[list[str], list[str]]:
+    """What to add to and drop from what Friday knows about me: short, new, and only lines that exist."""
+    known = {p.strip().lower() for p in req.profile}
+    remember = []
+    for fact in plan.remember[:5]:
+        fact = strip_slurs(" ".join(fact.split()))[:160]
+        if fact and fact.lower() not in known and fact.lower() not in {r.lower() for r in remember}:
+            remember.append(fact)
+    wanted = {f.strip().lower() for f in plan.forget}
+    forget = [p for p in req.profile if p.strip().lower() in wanted]
+    return remember, forget

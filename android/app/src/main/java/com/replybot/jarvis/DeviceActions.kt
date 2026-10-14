@@ -198,7 +198,9 @@ class DeviceActions(private val context: Context) {
      * only open their search screen from a link; "play from search" isn't honoured by all of them).
      */
     private fun play(task: DeviceTask): String? {
-        val q = task.text.ifBlank { "top hits" }
+        // "Kesariya song" → "Kesariya": the app's search knows it's a song.
+        val q = task.text.replace(Regex("\\b(the )?(song|songs|track)\\b", RegexOption.IGNORE_CASE), " ")
+            .replace(Regex("\\s+"), " ").trim().ifBlank { task.text.ifBlank { "top hits" } }
         val app = task.app.lowercase()
         fun has(pkg: String) = context.packageManager.getLaunchIntentForPackage(pkg) != null
         val (pkg, uri) = when {
@@ -210,7 +212,7 @@ class DeviceActions(private val context: Context) {
         }
         if (!has(pkg)) return "That app isn't on your phone, boss."
         if (!launch(Intent(Intent.ACTION_VIEW, Uri.parse(uri)).setPackage(pkg))) return "I couldn't open it, boss."
-        ChatReaderService.running?.jarvisTapResult(q, pkg, preferPlay = pkg == SPOTIFY)
+        ChatReaderService.running?.jarvisTapResult(q, pkg)
         return null
     }
 
@@ -231,8 +233,9 @@ class DeviceActions(private val context: Context) {
     }
 
     private fun search(query: String): String? {
-        val ok = launch(Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, query)) ||
-            launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(query))))
+        // Google itself: on some phones the generic "web search" goes to the maker's own search app.
+        val ok = launch(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.google.com/search?q=" + Uri.encode(query)))) ||
+            launch(Intent(Intent.ACTION_WEB_SEARCH).putExtra(SearchManager.QUERY, query))
         return if (ok) null else "I couldn't open a browser, boss."
     }
 

@@ -73,6 +73,24 @@ class Store private constructor(private val file: File, private val prefs: Share
 
     fun clearNotes() = prefs.edit().remove("jarvis_notes").apply()
 
+    /** What Friday knows about the user ("Name: Skanda", "Gym at 6 am"), on this phone only. */
+    val profile: List<String>
+        get() = runCatching { JSONArray(prefs.getString("friday_profile", "[]")).strings() }.getOrDefault(emptyList())
+
+    fun updateProfile(add: List<String>, remove: List<String> = emptyList()) {
+        val drop = remove.map { it.trim().lowercase() }.toSet()
+        val kept = profile.filter { it.trim().lowercase() !in drop }.toMutableList()
+        add.map { it.trim() }.filter { it.isNotEmpty() }.forEach { fact ->
+            if (kept.none { it.equals(fact, ignoreCase = true) }) kept += fact.take(160)
+        }
+        prefs.edit().putString("friday_profile", JSONArray(kept.takeLast(80)).toString()).apply()
+    }
+
+    /** Friday says when a personal message arrives: "Message from Rahul on WhatsApp. Shall I read it?" */
+    var announceMessages: Boolean
+        get() = prefs.getBoolean("friday_announce", false)
+        set(v) = prefs.edit().putBoolean("friday_announce", v).apply()
+
     /** "Hey Friday" is switched on (the listening service runs while this is true). */
     var jarvisOn: Boolean
         get() = prefs.getBoolean("jarvis_on", false)

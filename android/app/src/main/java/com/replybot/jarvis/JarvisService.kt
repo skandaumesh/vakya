@@ -54,6 +54,8 @@ class JarvisService : Service() {
         const val ACTION_STOP = "com.replybot.jarvis.STOP"
         /** Skip the wake word: listen for a command right now. */
         const val ACTION_TALK = "com.replybot.jarvis.TALK"
+        /** Voice check: record the next 8 s from the mic ("Hey Friday" a few times), count the wakes, save the clip. */
+        const val ACTION_CHECK = "com.replybot.jarvis.CHECK"
         /** Self-test: play a WAV from the app's own files folder instead of the microphone. */
         const val ACTION_TEST = "com.replybot.jarvis.TEST"
         const val EXTRA_FILE = "file"
@@ -71,6 +73,13 @@ class JarvisService : Service() {
         @Volatile
         var running = false
             private set
+
+        @Volatile private var instance: JarvisService? = null
+
+        /** New personal messages (from [NotificationWatcher]): say so, if the user wants that. */
+        fun announce(items: List<NotificationLog.Item>) {
+            instance?.let { it.main.post { it.queueAnnouncement(items) } }
+        }
 
         fun start(context: Context, action: String = ACTION_START, file: String? = null) {
             val intent = Intent(context, JarvisService::class.java).setAction(action)
@@ -128,13 +137,20 @@ class JarvisService : Service() {
             return START_NOT_STICKY
         }
         when (intent?.action) {
+            ACTION_CHECK -> main.post { startCheck() }
             ACTION_TALK -> main.post { beginCommand() }
             ACTION_TEST -> intent.getStringExtra(EXTRA_FILE)?.let(::playTestFile)
         }
         return START_STICKY
     }
 
+    override fun onCreate() {
+        super.onCreate()
+        instance = this
+    }
+
     override fun onDestroy() {
+        instance = null
         stopping = true
         running = false
         mic?.join(500)
@@ -246,12 +262,115 @@ class JarvisService : Service() {
         }
     }
 
+    // ---------- New messages ----------
+
+    private val waitingMessages = mutableListOf<NotificationLog.Item>()
+    private val announceNow = Runnable { announceWaiting() }
+
+    private fun queueAnnouncement(items: List<NotificationLog.Item>) {
+        if (!Store.get(this).announceMessages) return
+        waitingMessages += items
+        // A burst of messages gets one announcement.
+        main.removeCallbacks(announceNow)
+        main.postDelayed(announceNow, 2500)
+    }
+
+    /** "Message from Rahul on WhatsApp. Shall I read it?", then listen for the answer, no wake word needed. */
+    private fun announceWaiting() {
+        val items = waitingMessages.toList()
+        waitingMessages.clear()
+        if (items.isEmpty() || state != State.WAKE || mic == null || check != null) return
+        if (!quietIsFine()) return
+        // Already looking at it.
+        if (ChatReaderService.running?.foregroundPackage() in items.map { it.pkg }) return
+        val people = items.map { it.who }.distinct()
+        val app = items.map { it.app }.distinct().singleOrNull()
+        val on = app?.let { " on $it" }.orEmpty()
+        val say = when {
+            people.size == 1 && items.size == 1 -> "Message from ${people[0]}$on. Shall I read it?"
+            people.size == 1 -> "${items.size} messages from ${people[0]}$on. Shall I read them?"
+            people.size == 2 -> "Messages from ${people[0]} and ${people[1]}. Shall I read them?"
+            else -> "${items.size} new messages, boss. Shall I read them?"
+        }
+        Log.i(TAG, "friday: announcing ${items.size} messages")
+        state = State.BUSY
+        conversationOver = false
+        history.clear()
+        history.addLast("" to say)
+        hideToken++
+        ChatReaderService.running?.jarvisHud("Friday", say)
+        speak(say)
+    }
+
+    /** Not when the phone is on silent, in Do Not Disturb, or in a call. */
+    private fun quietIsFine(): Boolean {
+        val audio = getSystemService(AudioManager::class.java) ?: return false
+        if (audio.ringerMode != AudioManager.RINGER_MODE_NORMAL || audio.mode != AudioManager.MODE_NORMAL) return false
+        val nm = getSystemService(NotificationManager::class.java) ?: return true
+        return nm.currentInterruptionFilter <= NotificationManager.INTERRUPTION_FILTER_ALL
+    }
+
+    // Voice check: the mic's audio for a few seconds, saved so the wake word can be tuned to a real voice.
+    @Volatile private var check: ShortArray? = null
+    private var checkLength = 0
+    private var checkWakes = 0
+    private var levelSum = 0.0
+    private var levelPeak = 0.0
+    private var levelChunks = 0
+
+    private fun startCheck() {
+        checkLength = 0
+        checkWakes = 0
+        if (mic == null || state != State.WAKE) return
+        check = ShortArray(FridayWake.SAMPLE_RATE * 8)
+        ChatReaderService.running?.jarvisHud("Voice check", "Say \"Hey Friday\" three times, a second apart.")
+    }
+
+    private fun recordCheck(chunk: ShortArray, woke: Boolean) {
+        val buf = check ?: return
+        if (woke) checkWakes++
+        val n = minOf(chunk.size, buf.size - checkLength)
+        chunk.copyInto(buf, checkLength, 0, n)
+        checkLength += n
+        if (checkLength < buf.size) return
+        check = null
+        val wakes = checkWakes
+        val file = java.io.File(getExternalFilesDir(null), "friday_check.wav")
+        runCatching { file.writeBytes(Wav.encode(buf)) }
+        Log.i(TAG, "friday: voice check heard $wakes, saved ${file.name}")
+        state = State.BUSY
+        main.post {
+            conversationOver = true
+            val say = when (wakes) {
+                0 -> "I didn't catch it that time, boss."
+                1 -> "I heard you once, boss."
+                else -> "I heard you $wakes times, boss."
+            }
+            ChatReaderService.running?.jarvisHud("Voice check", say)
+            speak(say)
+        }
+    }
+
     /** 80 ms of audio, on the microphone (or self-test) thread. */
     private fun onChunk(chunk: ShortArray) {
         val level = rms(chunk)
+        // Loudness only (never audio): how loud the mic is, every ~5 s, to tune the wake word.
+        levelSum += level
+        if (level > levelPeak) levelPeak = level
+        if (++levelChunks >= 62) {
+            Log.i(TAG, "friday: mic level avg=%.0f peak=%.0f noise=%.0f".format(levelSum / levelChunks, levelPeak, noise))
+            levelSum = 0.0
+            levelPeak = 0.0
+            levelChunks = 0
+        }
         when (state) {
             State.WAKE -> {
                 val heard = wake?.process(chunk) ?: return
+                if (check != null) {
+                    recordCheck(chunk, heard)
+                    if (heard) wake?.reset()
+                    return
+                }
                 if (!heard) noise = noise * 0.97 + level * 0.03
                 if (heard) {
                     Log.i(TAG, "friday: wake word")
@@ -341,9 +460,14 @@ class JarvisService : Service() {
             localTime = SimpleDateFormat("EEE d MMM yyyy, h:mm a", Locale.ENGLISH).format(Date()),
             history = history.toList(),
             notes = store.notes,
+            profile = store.profile,
+            notificationsAllowed = NotificationWatcher.allowed(this),
+            notifications = NotificationLog.get(this).recent(),
         )
         val api = store.api()
         io.execute {
+            // Usage times take a moment to add up: off the main thread.
+            runCatching { body.put("habits", Habits.summary(this)) }
             val result = runCatching { api.jarvis(body) }
             main.post { handle(result, context) }
         }
@@ -354,10 +478,19 @@ class JarvisService : Service() {
         result
             .onSuccess { r ->
                 Log.i(TAG, "jarvis: action=${r.action} task=${r.task?.kind}")
+                if (r.remember.isNotEmpty() || r.forget.isNotEmpty()) {
+                    Store.get(this).updateProfile(r.remember, r.forget)
+                    Log.i(TAG, "friday: knows ${r.remember.size} new, forgot ${r.forget.size}")
+                }
                 var say = r.say
                 conversationOver = r.action == "end"
                 if (r.action == "end") a11y?.stopAutoScroll()
-                if (r.action == "device" && r.task != null) {
+                val locked = getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
+                if (r.action == "device" && r.task != null && locked &&
+                    r.task.kind in setOf("open_app", "play", "navigate", "search", "message", "call", "scroll", "settings")
+                ) {
+                    say = "Unlock your phone first, boss, then ask me again."
+                } else if (r.action == "device" && r.task != null) {
                     if (r.task.kind == "phone" && r.task.target == "screenshot") {
                         // Out of the picture first.
                         a11y?.jarvisHudHide()

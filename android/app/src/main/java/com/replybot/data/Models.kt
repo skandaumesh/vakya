@@ -54,6 +54,10 @@ data class JarvisResult(
     val suggest: SuggestResult?,
     /** device: a task for the phone (alarm, call, open an app...). */
     val task: DeviceTask?,
+    /** New facts about the user for Friday to keep ("Name: Skanda"). */
+    val remember: List<String> = emptyList(),
+    /** Facts the user asked Friday to forget. */
+    val forget: List<String> = emptyList(),
 )
 
 /** A phone task Jarvis heard; only the fields its [kind] needs are set. */

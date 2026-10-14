@@ -152,7 +152,9 @@ def quick_plan(heard: str, local_time: str | None = None, history: list[JarvisTu
     if m := re.fullmatch(r"play (.+?)(?: on (spotify|youtube music|youtube))?", t):
         app = m[2] or ""
         where = f" on {'YouTube Music' if app == 'youtube music' else app.title()}" if app else ""
-        return _plan(heard, f"Playing {m[1].strip()}{where}, boss.", kind="play", text=m[1].strip(), app=app)
+        # "kesariya song" -> "kesariya": the app's search knows it's a song.
+        what = " ".join(re.sub(r"\b(?:the )?(?:song|songs|track)\b", " ", m[1]).split()) or m[1].strip()
+        return _plan(heard, f"Playing {what}{where}, boss.", kind="play", text=what, app=app)
 
     if m := re.fullmatch(r"(?:navigate|directions|take me|drive) to (.+)", t):
         return _plan(heard, f"Taking you to {m[1].strip().title()}, boss.", kind="navigate", text=m[1].strip())

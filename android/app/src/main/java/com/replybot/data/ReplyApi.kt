@@ -135,7 +135,19 @@ class ReplyApi(
             localTime: String,
             history: List<Pair<String, String>> = emptyList(),
             notes: List<String> = emptyList(),
+            profile: List<String> = emptyList(),
+            notificationsAllowed: Boolean = false,
+            notifications: List<com.replybot.jarvis.NotificationLog.Item> = emptyList(),
         ): JSONObject = JSONObject()
+            .put("profile", JSONArray(profile.takeLast(80)))
+            .put("notifications_allowed", notificationsAllowed)
+            .put("notifications", JSONArray(notifications.take(30).map {
+                JSONObject()
+                    .put("app", it.app.take(40))
+                    .put("who", it.who.take(100))
+                    .put("text", it.text.take(400))
+                    .put("when", com.replybot.jarvis.NotificationLog.whenSaid(it.time))
+            }))
             .put("history", JSONArray(history.takeLast(6).map { (heard, say) ->
                 JSONObject().put("heard", heard.take(500)).put("say", say.take(500))
             }))
@@ -177,6 +189,8 @@ class ReplyApi(
                     target = it.optString("target"),
                 )
             },
+            remember = j.optJSONArray("remember")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty(),
+            forget = j.optJSONArray("forget")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty(),
         )
 
         fun parseCompose(j: JSONObject): ComposeResult {
