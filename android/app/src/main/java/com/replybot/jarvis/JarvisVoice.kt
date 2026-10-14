@@ -120,13 +120,17 @@ private class JennyVoice(context: Context) {
                     .build()
                 track.play()
                 var frames = 0
-                // Each sentence plays as soon as it's made.
-                tts.generateWithCallback(text, 0, 1.0f) { samples ->
-                    if (me != current) return@generateWithCallback 0
-                    track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
-                    frames += samples.size
-                    1
+                // Each sentence plays as soon as it's made. A real class, not a lambda: the native
+                // side looks up invoke(float[]) by name, which a compiled lambda doesn't have.
+                val play = object : (FloatArray) -> Int {
+                    override fun invoke(samples: FloatArray): Int {
+                        if (me != current) return 0
+                        track.write(samples, 0, samples.size, AudioTrack.WRITE_BLOCKING)
+                        frames += samples.size
+                        return 1
+                    }
                 }
+                tts.generateWithCallback(text, 0, 1.0f, play)
                 // Let the last of it play out.
                 val until = SystemClock.uptimeMillis() + 2000 + frames * 1000L / rate
                 while (me == current && track.playbackHeadPosition < frames && SystemClock.uptimeMillis() < until) {
