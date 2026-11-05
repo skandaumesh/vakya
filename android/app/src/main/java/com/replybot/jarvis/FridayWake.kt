@@ -57,7 +57,8 @@ class FridayWake(assets: AssetManager) : AutoCloseable {
     // recording this took the model from hearing "history" to hearing "Friday".
     private var gain = 1f
 
-    /** True when this 80 ms of audio completes "Hey Friday" (or "Friday"). */
+    /** True when this 80 ms of audio completes "Hey Friday" (or "Friday"). Thread-safe with [reset]. */
+    @Synchronized
     fun process(chunk: ShortArray): Boolean {
         var sum = 0.0
         for (s in chunk) sum += s.toDouble() * s
@@ -78,11 +79,13 @@ class FridayWake(assets: AssetManager) : AutoCloseable {
     }
 
     /** Forget what was heard, so the same words can't fire twice. */
+    @Synchronized
     fun reset() {
         stream.release()
         stream = spotter.createStream()
     }
 
+    @Synchronized
     override fun close() {
         stream.release()
         spotter.release()

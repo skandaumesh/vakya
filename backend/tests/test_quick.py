@@ -33,6 +33,7 @@ MORNING = "Wed 15 Oct 2026, 5:10 am"
     ("Play Kesariya on Spotify", NIGHT, "play", {"text": "kesariya", "app": "spotify"}),
     ("play lo-fi beats", NIGHT, "play", {"text": "lo fi beats", "app": ""}),
     ("play kesaria song on spotify", NIGHT, "play", {"text": "kesaria", "app": "spotify"}),
+    ("play we are the people at spotify", NIGHT, "play", {"text": "we are the people", "app": "spotify"}),
     ("play the song believer", NIGHT, "play", {"text": "believer", "app": ""}),
     ("navigate to MG Road", NIGHT, "navigate", {"text": "mg road"}),
     ("call Amma", NIGHT, "call", {"contact": "amma"}),

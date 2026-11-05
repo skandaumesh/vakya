@@ -65,11 +65,51 @@ def _plan(heard: str, say: str, **task) -> JarvisPlan:
     return JarvisPlan(heard=heard, action="device", say=say, task=DeviceTask(**task))
 
 
-def quick_plan(heard: str, local_time: str | None = None, history: list[JarvisTurn] | None = None) -> JarvisPlan | None:
+_YES_WORD = (r"(?:yes|yeah|yep|yup|haan|ha|han|ok|okay|sure|go ahead|do it|please|please do|go for it|"
+             r"sounds good|perfect|correct|right|confirm|confirmed|absolutely|of course)")
+_YES = rf"{_YES_WORD}(?: {_YES_WORD})*"  # "yes go ahead", "ok sure do it"
+_NO = r"(?:no|nope|nah|na|don'?t|do not|cancel|cancel it|leave it|not now|no thanks|no thank you|forget it|wait|stop it)"
+
+# "wifi" -> toggle target; the words people say for each switch.
+_TOGGLES = {
+    r"wi ?-?fi|wireless|internet": "wifi",
+    r"bluetooth|blue tooth": "bluetooth",
+    r"mobile data|cellular data|data": "mobile_data",
+    r"(?:do not|don'?t) disturb|dnd|silent mode|focus mode": "dnd",
+    r"(?:battery|power) sav(?:er|ing)(?: mode)?|low power mode": "battery_saver",
+    r"auto ?-?rotat(?:e|ion)|rotation|screen rotation": "rotation",
+    r"aero ?plane mode|airplane mode|flight mode": "airplane",
+    r"(?:mobile |wi ?-?fi )?hotspot|tethering": "hotspot",
+    r"location|gps": "location",
+    r"dark mode|dark theme|night mode": "dark_mode",
+    r"nfc": "nfc",
+}
+_TOGGLE_WORDS = "|".join(f"(?:{p})" for p in _TOGGLES)
+_SPOKEN_TOGGLE = {
+    "wifi": "Wi-Fi", "bluetooth": "Bluetooth", "mobile_data": "Mobile data", "dnd": "Do not disturb",
+    "battery_saver": "Battery saver", "rotation": "Auto-rotate", "airplane": "Airplane mode", "hotspot": "Hotspot",
+    "location": "Location", "dark_mode": "Dark mode", "nfc": "NFC",
+}
+
+
+def _toggle_target(words: str) -> str | None:
+    return next((t for p, t in _TOGGLES.items() if re.fullmatch(p, words)), None)
+
+
+def quick_plan(
+    heard: str, local_time: str | None = None, history: list[JarvisTurn] | None = None, pending: str | None = None,
+) -> JarvisPlan | None:
     t = _clean(heard)
     if not t:
         return None
     now = _now(local_time)
+
+    # Yes or no to steps Friday asked about ("... Shall I?").
+    if pending:
+        if re.fullmatch(_YES + r"(?: friday| boss)?", t):
+            return JarvisPlan(heard=heard, action="confirm", say="On it, boss.")
+        if re.fullmatch(_NO + r"(?: friday| boss)?|never ?mind|nothing", t):
+            return JarvisPlan(heard=heard, action="cancel", say="Okay, I won't.")
 
     if re.fullmatch(r"(?:ok |okay )?(?:thanks|thank you|thats all|that's all|that is all|stop|bye|goodbye|never ?mind|nothing)", t):
         return JarvisPlan(heard=heard, action="end", say="Anytime, boss.")
@@ -79,6 +119,57 @@ def quick_plan(heard: str, local_time: str | None = None, history: list[JarvisTu
         if history and "send it?" in history[-1].say.lower():
             return _plan(heard, "Sent, boss.", kind="send")
         return None
+
+    # The screen: Friday looks first (a screenshot), then answers.
+    if re.fullmatch(r"(?:what'?s|what is) (?:on )?(?:my |the |this )?screen|what am i looking at|what'?s this|what is this|"
+                    r"(?:read|explain|describe) (?:my |the |this )?(?:screen|page)(?: to me)?|look at (?:my |the |this )?screen|"
+                    r"what does (?:this|it|the screen) say|what does this (?:error|message) mean|read this(?: to me)?", t):
+        return JarvisPlan(heard=heard, action="look", say="Let me look, boss.")
+
+    # Switches: "turn on wifi", "bluetooth off", "enable do not disturb", "switch off battery saver".
+    if m := re.fullmatch(rf"(?:turn|switch|put|set) (on|off) (?:the |my )?({_TOGGLE_WORDS})|"
+                         rf"(?:turn|switch|put) (?:the |my )?({_TOGGLE_WORDS}) (on|off)|"
+                         rf"(?:the |my )?({_TOGGLE_WORDS}) (on|off)|"
+                         rf"(enable|disable|activate|deactivate|start|stop) (?:the |my )?({_TOGGLE_WORDS})", t):
+        word = next(g for g in (m[1], m[4], m[6], m[7]) if g)
+        target = _toggle_target(m[2] or m[3] or m[5] or m[8])
+        if target:
+            on = word in ("on", "enable", "activate", "start")
+            return _plan(heard, f"{_SPOKEN_TOGGLE[target]} {'on' if on else 'off'}, boss.", kind="toggle", target=target, on=on)
+
+    # Brightness: "brightness up", "set brightness to 40", "full brightness", "dim the screen".
+    if m := re.fullmatch(r"(?:set |change |put )?(?:the |screen |my )?brightness (?:to |at )?" + _NUMBER + r"(?: ?%| percent)?", t):
+        n = _number(m[1])
+        if n is not None and 0 <= n <= 100:
+            return _plan(heard, f"Brightness at {n} percent, boss.", kind="brightness", value=n)
+    if re.fullmatch(r"(?:full|max|maximum|highest) brightness|brightness (?:to )?(?:full|max|maximum)", t):
+        return _plan(heard, "Full brightness, boss.", kind="brightness", value=100)
+    if re.fullmatch(r"(?:lowest|minimum|min) brightness|brightness (?:to )?(?:lowest|minimum|min)", t):
+        return _plan(heard, "Lowest brightness, boss.", kind="brightness", value=5)
+    if m := re.fullmatch(r"(?:turn (?:the )?brightness (up|down)|brightness (up|down)|(increase|raise|decrease|lower|reduce) (?:the )?brightness|"
+                         r"(dim|brighten) (?:the |my )?screen)", t):
+        word = next(g for g in m.groups() if g)
+        up = word in ("up", "increase", "raise", "brighten")
+        return _plan(heard, f"Brightness {'up' if up else 'down'}, boss.", kind="brightness", on=up)
+
+    # Volume to a level: "set volume to 50", "max volume", "unmute".
+    if m := re.fullmatch(r"(?:set |change |put )?(?:the |my )?volume (?:to |at )?" + _NUMBER + r"(?: ?%| percent)?", t):
+        n = _number(m[1])
+        if n is not None and 0 <= n <= 100:
+            return _plan(heard, f"Volume at {n} percent, boss.", kind="volume", value=n)
+    if re.fullmatch(r"(?:full|max|maximum) volume|volume (?:to )?(?:full|max|maximum)", t):
+        return _plan(heard, "Full volume, boss.", kind="volume", value=100)
+    if re.fullmatch(r"unmute(?: the phone| it| the music)?", t):
+        return _plan(heard, "Unmuted, boss.", kind="volume", target="unmute")
+
+    if re.fullmatch(r"(?:go |switch )?(?:back )?to (?:the )?(?:last|previous) app|(?:last|previous) app|switch apps?", t):
+        return _plan(heard, "Done, boss.", kind="phone", target="last_app")
+
+    # "tap accept", "press install", "click on sign in": the button by its words on screen.
+    if m := re.fullmatch(r"(?:tap|press|click|hit|select)(?: on)? (?:the )?(.{2,40}?)(?: button| option)?", t):
+        what = m[1].strip()
+        if what not in {"it", "that", "this", "here", "there", "play", "pause", "send", "back", "home"}:
+            return _plan(heard, f"Tapping {what}, boss.", kind="tap", text=what)
 
     if m := re.fullmatch(r"(?:set (?:an |the |my )?alarm|wake me(?: up)?)(?: (?:for|at))? " + _TIME
                          + r"(?: tomorrow| today| in the morning| tonight)?(?: (?:for|to) (.+))?", t):
@@ -160,7 +251,8 @@ def quick_plan(heard: str, local_time: str | None = None, history: list[JarvisTu
         if name and len(name.split()) <= 3 and name not in {"chat", "the chat", "message", "messages"}:
             return _plan(heard, f"Opening {name.title()}, boss.", kind="open_app", app=name)
 
-    if m := re.fullmatch(r"play (.+?)(?: on (spotify|youtube music|youtube))?", t):
+    # "on Spotify", or as speech-to-text sometimes writes it, "at/in/from Spotify".
+    if m := re.fullmatch(r"play (.+?)(?: (?:on|at|in|from|using) (spotify|youtube music|youtube))?", t):
         app = m[2] or ""
         where = f" on {'YouTube Music' if app == 'youtube music' else app.title()}" if app else ""
         # "kesariya song" -> "kesariya": the app's search knows it's a song.

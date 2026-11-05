@@ -163,7 +163,7 @@ class OpenAICompatProvider:
             await asyncio.sleep(max(wait, 0) + 0.3)
         raise limited or RateLimited(f"{self.name} free limit reached on all models, try again soon")
 
-    async def describe_image(self, image_b64: str, prompt: str) -> str:
+    async def describe_image(self, image_b64: str, prompt: str, max_tokens: int = 300) -> str:
         """One short description of a photo or sticker, from the provider's vision model."""
         if not self.vision_model:
             raise LLMError(f"{self.name} has no vision model configured")
@@ -174,7 +174,7 @@ class OpenAICompatProvider:
                     {"type": "text", "text": prompt},
                     {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}},
                 ]}],
-                **{self.max_tokens_param: 300},
+                **{self.max_tokens_param: max_tokens},
             )
         except openai.RateLimitError as e:
             raise _rate_limited(self.name, e) from e

@@ -73,7 +73,7 @@ class MainActivity : Activity() {
     private fun px(dp: Int) = (dp * resources.displayMetrics.density).roundToInt()
 
     /** Light or dark colours, following the phone's dark-mode setting. */
-    /** OneZeroLabs brand colours: Vakya's main screen is always the white theme. */
+    /** Friday's dark look, shared with the Command Center. */
     private val c = Palette.BRAND
 
     /** Instrument Serif, the OneZeroLabs website's heading font. */
@@ -292,8 +292,13 @@ class MainActivity : Activity() {
                     "• Hey Friday (if you switch it on) listens for her name on this phone only. What you say " +
                     "after it goes to Groq to become text, then to the Vakya server, and isn't kept. " +
                     "For calls and messages it looks names up in your contacts on this phone; contacts are never sent anywhere. " +
-                    "When you ask her to play a song or scroll, she looks at that app's screen just then to press play or swipe; " +
-                    "nothing from it is saved or sent.\n\n" +
+                    "When you ask her to play a song, scroll, tap a button or flip a switch, she looks at that app's screen " +
+                    "(or Quick Settings) just then to press it; nothing from it is saved or sent.\n\n" +
+                    "• Friday sees your screen only when you ask (\"what's on my screen?\", holding the floating orb, or when " +
+                    "a tap she tried didn't work): then a screenshot and the screen's words go to the AI with your question, and " +
+                    "\"SEEING SCREEN\" shows while she looks. Nothing is saved. Banking and password screens come out black.\n\n" +
+                    "• What Friday remembers (about you, tasks, routines, your recent talks with her) stays on this phone. " +
+                    "Only the few items that match a question go to the AI. Export or delete all of it in the Command Center.\n\n" +
                     "• If you let Friday see notifications, she keeps the last day of them on this phone (never OTPs or " +
                     "codes), and they go to the AI only when you ask her about your messages. With \"Learn my day\" she " +
                     "adds up your app-usage times on this phone, and they go to the AI only when you ask about your day. " +
@@ -980,7 +985,7 @@ class MainActivity : Activity() {
     }
 }
 
-/** OneZeroLabs brand colours (from onezerolabs.in): white, deep navy, slate, gold, blue. */
+/** The settings screen's colours: Friday's dark look. */
 private class Palette(
     val bgTop: Int, val bgBottom: Int,
     val text: Int, val body: Int, val muted: Int, val hint: Int,
@@ -991,17 +996,18 @@ private class Palette(
     val success: Int, val error: Int,
 ) {
     companion object {
+        /** Friday's dark look: navy-black glass, cyan accents (same as the Command Center). */
         val BRAND = Palette(
-            bgTop = 0xFFFFFFFF.toInt(), bgBottom = 0xFFF8FAFC.toInt(),
-            text = 0xFF0E1A33.toInt(), body = 0xFF33415C.toInt(), muted = 0xFF6E809F.toInt(), hint = 0xFF94A3B8.toInt(),
-            accent = 0xFF0E1A33.toInt(), link = 0xFF2563EB.toInt(),
-            badge = 0xFFFDF4DD.toInt(), badgeText = 0xFF8A6420.toInt(),
-            card = 0xFFFFFFFF.toInt(), cardStroke = 0xFFECEFF4.toInt(),
-            inset = 0xFFF8FAFC.toInt(), insetStroke = 0xFFECEFF4.toInt(),
-            input = 0xFFFFFFFF.toInt(), inputStroke = 0xFFE2E8F0.toInt(),
-            primary = 0xFF0E1A33.toInt(), secondary = 0xFFFFFFFF.toInt(),
-            secondaryStroke = 0xFF0E1A33.toInt(), secondaryText = 0xFF0E1A33.toInt(),
-            success = 0xFF1B9E57.toInt(), error = 0xFFE5334A.toInt(),
+            bgTop = 0xFF030712.toInt(), bgBottom = 0xFF071A2E.toInt(),
+            text = 0xFFE8F7FF.toInt(), body = 0xFFAFC7D8.toInt(), muted = 0xFF6B8AA3.toInt(), hint = 0xFF4F6B82.toInt(),
+            accent = 0xFF5CE1FF.toInt(), link = 0xFF5CE1FF.toInt(),
+            badge = 0x1A5CE1FF, badgeText = 0xFF5CE1FF.toInt(),
+            card = 0xB30B1A30.toInt(), cardStroke = 0x335CE1FF,
+            inset = 0x66102540, insetStroke = 0x225CE1FF,
+            input = 0x260B2A48, inputStroke = 0x445CE1FF,
+            primary = 0xFF0C6A8A.toInt(), secondary = 0x1A5CE1FF,
+            secondaryStroke = 0x665CE1FF, secondaryText = 0xFF5CE1FF.toInt(),
+            success = 0xFF34D399.toInt(), error = 0xFFF87171.toInt(),
         )
     }
 }

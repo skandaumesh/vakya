@@ -96,6 +96,54 @@ class Store private constructor(private val file: File, private val prefs: Share
         get() = prefs.getBoolean("friday_announce", false)
         set(v) = prefs.edit().putBoolean("friday_announce", v).apply()
 
+    /** The floating Friday orb over other apps (tap to talk, hold to have her look at the screen). */
+    var floatingFriday: Boolean
+        get() = prefs.getBoolean("friday_floating", false)
+        set(v) = prefs.edit().putBoolean("friday_floating", v).apply()
+
+    /** Where the user left the floating orb, in pixels (-1: not moved yet). */
+    var floatingPos: Pair<Int, Int>
+        get() = prefs.getInt("friday_floating_x", -1) to prefs.getInt("friday_floating_y", -1)
+        set(v) = prefs.edit().putInt("friday_floating_x", v.first).putInt("friday_floating_y", v.second).apply()
+
+    /** On "Hey Friday" and a pause, Friday says "How can I help you, boss?" before listening. */
+    var fridayGreeting: Boolean
+        get() = prefs.getBoolean("friday_greeting", true)
+        set(v) = prefs.edit().putBoolean("friday_greeting", v).apply()
+
+    /** Proactive Friday: each one is off until the user switches it on in the Command Center. */
+    var morningBriefing: Boolean
+        get() = prefs.getBoolean("friday_morning", false)
+        set(v) = prefs.edit().putBoolean("friday_morning", v).apply()
+
+    /** Minutes after midnight. */
+    var morningAt: Int
+        get() = prefs.getInt("friday_morning_at", 7 * 60 + 30)
+        set(v) = prefs.edit().putInt("friday_morning_at", v).apply()
+
+    var eveningSummary: Boolean
+        get() = prefs.getBoolean("friday_evening", false)
+        set(v) = prefs.edit().putBoolean("friday_evening", v).apply()
+
+    var eveningAt: Int
+        get() = prefs.getInt("friday_evening_at", 21 * 60)
+        set(v) = prefs.edit().putInt("friday_evening_at", v).apply()
+
+    /** "Battery's at 15 percent, boss. Want battery saver?" */
+    var batteryAlerts: Boolean
+        get() = prefs.getBoolean("friday_battery_alerts", true)
+        set(v) = prefs.edit().putBoolean("friday_battery_alerts", v).apply()
+
+    /** "Design review in ten minutes, boss." (needs calendar access) */
+    var calendarAlerts: Boolean
+        get() = prefs.getBoolean("friday_calendar_alerts", true)
+        set(v) = prefs.edit().putBoolean("friday_calendar_alerts", v).apply()
+
+    /** Says reminders when they're due ("Reminder, boss: pay the rent."). */
+    var taskAlerts: Boolean
+        get() = prefs.getBoolean("friday_task_alerts", true)
+        set(v) = prefs.edit().putBoolean("friday_task_alerts", v).apply()
+
     /** "Hey Friday" is switched on (the listening service runs while this is true). */
     var jarvisOn: Boolean
         get() = prefs.getBoolean("jarvis_on", false)

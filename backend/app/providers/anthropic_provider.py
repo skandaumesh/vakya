@@ -21,11 +21,11 @@ class AnthropicProvider:
         if self.client.api_key is None and self.client.auth_token is None and self.client.credentials is None:
             raise MissingCredentials("no Anthropic credentials: set ANTHROPIC_API_KEY")
 
-    async def describe_image(self, image_b64: str, prompt: str) -> str:
+    async def describe_image(self, image_b64: str, prompt: str, max_tokens: int = 300) -> str:
         try:
             response = await self.client.messages.create(
                 model=self.model,
-                max_tokens=200,
+                max_tokens=max_tokens,
                 messages=[{"role": "user", "content": [
                     {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg", "data": image_b64}},
                     {"type": "text", "text": prompt},

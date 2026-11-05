@@ -67,11 +67,11 @@ class ChainProvider:
                 errors.append(e)
         raise self._most_useful(errors) if errors else LLMError("no speech-to-text available")
 
-    async def describe_image(self, image_b64: str, prompt: str) -> str:
+    async def describe_image(self, image_b64: str, prompt: str, max_tokens: int = 300) -> str:
         errors: list[Exception] = []
         for p in self._available():
             try:
-                return await p.describe_image(image_b64, prompt)
+                return await p.describe_image(image_b64, prompt, max_tokens)
             except (LLMError, MissingCredentials) as e:  # rate limits, no vision model, refused...
                 if isinstance(e, (ProviderUnavailable, MissingCredentials)):
                     self._note_failure(p, e)

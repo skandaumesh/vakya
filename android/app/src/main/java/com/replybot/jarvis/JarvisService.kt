@@ -1,13 +1,16 @@
 package com.replybot.jarvis
 
 import android.Manifest
+import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.drawable.Icon
@@ -20,18 +23,24 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.util.Log
-import android.os.SystemClock
 import com.replybot.R
+import com.replybot.agent.FridayBus
+import com.replybot.agent.TaskRunner
+import com.replybot.automation.Proactive
 import com.replybot.data.DeviceTask
 import com.replybot.data.JarvisContext
 import com.replybot.data.JarvisResult
 import com.replybot.data.ReplyApi
 import com.replybot.data.Store
+import com.replybot.device.CalendarReader
+import com.replybot.device.DeviceStatus
+import com.replybot.memory.Memory
 import com.replybot.service.ChatReaderService
-import com.replybot.ui.MainActivity
+import com.replybot.ui.CommandCenterActivity
 import java.io.File
 import java.io.IOException
 import java.net.SocketTimeoutException
@@ -44,10 +53,12 @@ import kotlin.math.sqrt
 /**
  * "Hey Friday". Listens on the phone for the wake word (no audio leaves the phone until it's
  * heard), records the command until you stop talking, sends it to the Vakya server, and does
- * what it says: writes into the open chat, shows reply options, or answers aloud.
+ * what it says: writes into the open chat, shows reply options, answers aloud, or runs the steps
+ * of a plan on the phone (checking each one), looking at the screen first when she needs to.
  *
  * A foreground service with a notification ("Friday is listening"), started from the Vakya app
- * while "Listen for Hey Friday" is on. It sends a message only after you say yes.
+ * while "Listen for Hey Friday" is on. She sends a message only after you say yes, asks before
+ * running a routine, and can be interrupted by saying "Friday" while she talks, or with stop.
  */
 class JarvisService : Service() {
 
@@ -60,20 +71,35 @@ class JarvisService : Service() {
         const val ACTION_CHECK = "com.replybot.jarvis.CHECK"
         /** Self-test: play a WAV from the app's own files folder instead of the microphone. */
         const val ACTION_TEST = "com.replybot.jarvis.TEST"
+        /** Look at the screen and explain it (the floating orb, held). */
+        const val ACTION_LOOK = "com.replybot.jarvis.LOOK"
+        /** A typed command ([EXTRA_TEXT]), from the Friday screen. */
+        const val ACTION_ASK = "com.replybot.jarvis.ASK"
+        /** A spoken briefing ([EXTRA_KIND]: morning, evening or day). */
+        const val ACTION_BRIEFING = "com.replybot.jarvis.BRIEFING"
+        /** Stop talking and doing, now. */
+        const val ACTION_INTERRUPT = "com.replybot.jarvis.INTERRUPT"
         const val EXTRA_FILE = "file"
+        const val EXTRA_TEXT = "text"
+        const val EXTRA_KIND = "kind"
 
         private const val TAG = "Vakya"
         private const val CHANNEL = "jarvis"
+        private const val ALERTS = "friday_alerts"
         private const val NOTIFICATION_ID = 7
 
-        private const val MAX_COMMAND_CHUNKS = 125  // 10 s
-        private const val NO_SPEECH_CHUNKS = 50     // 4 s and nothing said: give up
-        private const val FOLLOW_UP_CHUNKS = 70     // after an answer, 5.6 s to say something more
-        private const val END_SILENCE_CHUNKS = 7    // 0.56 s of quiet after speaking: done
+        private const val MAX_COMMAND_CHUNKS = 190  // 15 s
+        private const val NO_SPEECH_CHUNKS = 75     // 6 s and nothing said: give up
+        private const val FOLLOW_UP_CHUNKS = 100    // after an answer, 8 s to say something more
+        // The quiet that ends a command: long enough that a pause to think mid-sentence
+        // ("message Amma that... I'll be late") doesn't cut it off.
+        private const val END_SILENCE_CHUNKS = 16   // 1.3 s once a few words are in
+        private const val END_SILENCE_EARLY = 22    // 1.8 s while only a word or two has been said
+        private const val GREET_WAIT_CHUNKS = 10    // 0.8 s of quiet after "Hey Friday": greet, then listen
+        const val GREETING = "How can I help you, boss?"
         private const val CHIME_CHUNKS = 2          // don't record the "listening" chime
         private const val PRE_ROLL_CHUNKS = 20      // 1.6 s before the wake word goes with the command
-        // Tasks that need the screen: with the phone locked, ask to unlock first.
-        private val NEEDS_SCREEN = setOf("open_app", "play", "navigate", "search", "message", "scroll", "settings")
+        private const val PENDING_FOR_MS = 2 * 60_000L
 
         @Volatile
         var running = false
@@ -91,10 +117,54 @@ class JarvisService : Service() {
             instance?.let { it.main.post { it.queueAnnouncement(items) } }
         }
 
+        /** Stop talking and doing (stop buttons). */
+        fun interrupt() {
+            instance?.let { it.main.post { it.interruptAll() } }
+        }
+
+        /** A scheduled briefing: true if Friday is on and will say it now. */
+        fun briefing(kind: String): Boolean {
+            val s = instance ?: return false
+            s.main.post { s.startBriefing(kind, byUser = false) }
+            return true
+        }
+
         fun start(context: Context, action: String = ACTION_START, file: String? = null) {
             val intent = Intent(context, JarvisService::class.java).setAction(action)
             if (file != null) intent.putExtra(EXTRA_FILE, file)
             context.startForegroundService(intent)
+        }
+
+        /**
+         * Talk / look / ask from anywhere (floating orb, the card at the top, Command Center). Goes
+         * straight to the running service, or starts her for it. Friday only ever shows as the card
+         * at the top of the screen; no screen of her own opens.
+         */
+        fun command(context: Context, action: String, text: String? = null) {
+            val s = instance
+            if (s != null && running) {
+                s.main.post {
+                    when (action) {
+                        ACTION_TALK -> s.talkNow()
+                        ACTION_LOOK -> s.lookNow()
+                        ACTION_ASK -> text?.let(s::typed)
+                        ACTION_INTERRUPT -> s.interruptAll()
+                    }
+                }
+                return
+            }
+            val intent = Intent(context, JarvisService::class.java).setAction(action)
+            text?.let { intent.putExtra(EXTRA_TEXT, it) }
+            runCatching { context.startForegroundService(intent) }.onFailure {
+                // Android only lets the microphone start while Vakya is in front.
+                android.widget.Toast.makeText(context, "Open Vakya and turn on Listen for Hey Friday.", android.widget.Toast.LENGTH_LONG).show()
+            }
+        }
+
+        /** A briefing asked for now (Command Center): starts Friday if needed. */
+        fun startBriefingNow(context: Context, kind: String) {
+            val intent = Intent(context, JarvisService::class.java).setAction(ACTION_BRIEFING).putExtra(EXTRA_KIND, kind)
+            runCatching { context.startForegroundService(intent) }
         }
 
         fun stop(context: Context) {
@@ -102,7 +172,23 @@ class JarvisService : Service() {
         }
     }
 
-    private enum class State { WAKE, COMMAND, BUSY }
+    // WAKE: waiting for "Hey Friday". COMMAND: recording what's said. BUSY: thinking or working.
+    // SPEAKING: talking, while still listening for "Friday" to be interrupted.
+    private enum class State { WAKE, COMMAND, BUSY, SPEAKING }
+
+    /** One request to the server, and what kind it was. */
+    private data class Ask(
+        val text: String? = null,
+        val looked: Boolean = false,
+        val failed: List<String> = emptyList(),
+        val briefing: String? = null,
+    )
+
+    /** Steps waiting for the user's yes, and the question Friday asked. */
+    private data class Pending(val steps: List<DeviceTask>, val question: String, val at: Long)
+
+    /** Steps waiting for the phone to be unlocked. */
+    private data class UnlockWait(val steps: List<DeviceTask>, val say: String, val heard: String, val at: Long)
 
     @Volatile private var state = State.WAKE
     @Volatile private var stopping = false
@@ -121,6 +207,9 @@ class JarvisService : Service() {
     /** The last answer ended the conversation ("thanks"), or failed. */
     private var conversationOver = false
     private val device by lazy { DeviceActions(this) }
+    private val runner by lazy { TaskRunner(device) }
+    private val status by lazy { DeviceStatus(this) }
+    private var pending: Pending? = null
 
     // The command being recorded (audio thread only, after beginCommand sets it up).
     private val command = ShortArray((MAX_COMMAND_CHUNKS + PRE_ROLL_CHUNKS) * FridayWake.CHUNK)
@@ -129,13 +218,18 @@ class JarvisService : Service() {
     private val preRoll = ArrayDeque<ShortArray>()
     /** This command began with the wake word (not "Talk now" or a follow-up). */
     private var fromWake = false
-    /** A task waiting for the phone to be unlocked: what to do, what to say, and when it was asked. */
-    private var unlockWait: Triple<DeviceTask, String, Long>? = null
+    private var unlockWait: UnlockWait? = null
     private var commandLength = 0
     private var commandChunks = 0
     private var silentChunks = 0
     private var skipChunks = 0
     private var heardSpeech = false
+    /** How much of the command was speech (80 ms chunks): pauses are allowed longer early on. */
+    private var spokenChunks = 0
+    /** Just woken by "Hey Friday": greet if nothing more is said in a moment. */
+    private var greetPending = false
+    /** Friday has just said the greeting: the command comes next. */
+    private var afterGreeting = false
     /** Background loudness, learnt while waiting for the wake word. */
     private var noise = 300.0
 
@@ -155,24 +249,38 @@ class JarvisService : Service() {
         }
         when (intent?.action) {
             ACTION_CHECK -> main.post { startCheck() }
-            ACTION_TALK -> main.post { beginCommand() }
+            ACTION_TALK -> main.post { talkNow() }
+            ACTION_LOOK -> main.post { lookNow() }
+            ACTION_ASK -> intent.getStringExtra(EXTRA_TEXT)?.let { t -> main.post { typed(t) } }
+            ACTION_BRIEFING -> main.post { startBriefing(intent.getStringExtra(EXTRA_KIND) ?: "day") }
+            ACTION_INTERRUPT -> main.post { interruptAll() }
             ACTION_TEST -> intent.getStringExtra(EXTRA_FILE)?.let(::playTestFile)
         }
         return START_STICKY
     }
 
+    // Unlocked any way (the prompt Friday showed, or as usual): finish what was waiting for it.
+    private val unlockedReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = afterUnlock(true)
+    }
+
     override fun onCreate() {
         super.onCreate()
         instance = this
+        registerReceiver(unlockedReceiver, IntentFilter(Intent.ACTION_USER_PRESENT))
+        main.postDelayed(proactiveTick, 20_000)
     }
 
     override fun onDestroy() {
         instance = null
+        runCatching { unregisterReceiver(unlockedReceiver) }
         stopping = true
         running = false
+        runner.cancel()
         mic?.join(500)
         main.removeCallbacksAndMessages(null)
         ChatReaderService.running?.jarvisHudHide()
+        FridayBus.update { copy(phase = FridayBus.Phase.OFF, steps = emptyList(), seeing = false, pending = null) }
         voice?.shutdown()
         io.execute { wake?.close() }
         io.shutdown()
@@ -183,10 +291,16 @@ class JarvisService : Service() {
 
     private fun goForeground(): Boolean {
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return false
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
+        val nm = getSystemService(NotificationManager::class.java)
+        nm.createNotificationChannel(
             NotificationChannel(CHANNEL, "Hey Friday", NotificationManager.IMPORTANCE_LOW).apply {
                 description = "Shown while Friday listens for \"Hey Friday\""
                 setShowBadge(false)
+            },
+        )
+        nm.createNotificationChannel(
+            NotificationChannel(ALERTS, "Friday's reminders", NotificationManager.IMPORTANCE_HIGH).apply {
+                description = "Reminders, upcoming events and low battery"
             },
         )
         val icon = Icon.createWithResource(this, R.drawable.ic_jarvis)
@@ -198,9 +312,8 @@ class JarvisService : Service() {
             .setContentTitle("Friday is listening")
             .setContentText("Say \"Hey Friday\", then what you need")
             .setOngoing(true)
-            .setContentIntent(
-                PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE),
-            )
+            // Tapping the notification: talk to Friday (her card shows at the top; nothing opens).
+            .setContentIntent(service(0, ACTION_TALK))
             .addAction(Notification.Action.Builder(icon, "Talk now", service(1, ACTION_TALK)).build())
             .addAction(Notification.Action.Builder(icon, "Turn off", service(2, ACTION_STOP)).build())
             .build()
@@ -227,14 +340,27 @@ class JarvisService : Service() {
                 Log.e(TAG, "friday: wake word model failed to load", e)
                 return false
             }
-            voice = JarvisVoice(this)
+            voice = JarvisVoice(this).also { it.prepare(GREETING) }
             running = true
+            phase(FridayBus.Phase.IDLE)
         }
         if (withMic && mic == null) {
             stopping = false
             mic = Thread(::listen, "jarvis-mic").apply { start() }
         }
         return true
+    }
+
+    // ---------- What every Friday view shows ----------
+
+    private fun phase(p: FridayBus.Phase, seeing: Boolean = false) {
+        FridayBus.update { copy(phase = p, seeing = seeing, level = if (p == FridayBus.Phase.LISTENING) level else 0f) }
+        ChatReaderService.running?.jarvisPhase(p, seeing)
+    }
+
+    private fun hud(state: String, caption: String? = null, thinking: Boolean = false) {
+        ChatReaderService.running?.jarvisHud(state, caption, thinking)
+        ChatReaderService.running?.jarvisPhase(FridayBus.state.phase, FridayBus.state.seeing)
     }
 
     // ---------- Listening ----------
@@ -310,12 +436,21 @@ class JarvisService : Service() {
             else -> "${items.size} new messages, boss. Shall I read them?"
         }
         Log.i(TAG, "friday: announcing ${items.size} messages")
+        proactiveSay(say, followUp = true)
+    }
+
+    /** Friday speaks up on her own (a message came, a reminder is due), then listens for an answer. */
+    private fun proactiveSay(say: String, followUp: Boolean, pendingSteps: List<DeviceTask> = emptyList()) {
         state = State.BUSY
-        conversationOver = false
+        conversationOver = !followUp
         history.clear()
         history.addLast("" to say)
+        pending = if (pendingSteps.isNotEmpty()) Pending(pendingSteps, say, SystemClock.elapsedRealtime()) else null
+        val question = pending?.question
+        FridayBus.update { copy(lines = emptyList(), steps = emptyList(), pending = question) }
+        FridayBus.line(false, say)
         hideToken++
-        ChatReaderService.running?.jarvisHud("Friday", say)
+        hud("Friday", say)
         speak(say)
     }
 
@@ -326,6 +461,71 @@ class JarvisService : Service() {
         val nm = getSystemService(NotificationManager::class.java) ?: return true
         return nm.currentInterruptionFilter <= NotificationManager.INTERRUPTION_FILTER_ALL
     }
+
+    // ---------- Proactive: reminders, events, battery ----------
+
+    private val announcedEvents = HashSet<Long>()
+    private var lowBatterySaid = false
+
+    private val proactiveTick = object : Runnable {
+        override fun run() {
+            runCatching { proactive() }.onFailure { Log.w(TAG, "friday proactive: ${it.javaClass.simpleName}") }
+            main.postDelayed(this, 60_000)
+        }
+    }
+
+    private fun proactive() {
+        val store = Store.get(this)
+        val memory = Memory.get(this)
+        if (store.taskAlerts) {
+            memory.takeDue().forEach { t ->
+                Proactive.notify(this, ALERTS, "Reminder", t.text, id = t.id.hashCode())
+                if (state == State.WAKE && quietIsFine()) proactiveSay("Reminder, boss: ${t.text}.", followUp = false)
+            }
+        }
+        if (store.calendarAlerts && CalendarReader.allowed(this)) {
+            val now = System.currentTimeMillis()
+            CalendarReader.upcoming(this, hours = 1).filter { !it.allDay && it.begin - now in 8 * 60_000L..11 * 60_000L }
+                .forEach { e ->
+                    if (announcedEvents.add(e.id * 31 + e.begin)) {
+                        val text = "${e.title} in ten minutes" + if (e.location.isNotBlank()) ", at ${e.location}." else "."
+                        Proactive.notify(this, ALERTS, "Coming up", text, id = e.id.toInt())
+                        if (state == State.WAKE && quietIsFine()) proactiveSay("Heads up, boss: $text", followUp = false)
+                    }
+                }
+        }
+        if (store.batteryAlerts) {
+            val b = status.battery()
+            if (b.charging || b.percent > 25) lowBatterySaid = false
+            val saver = status.isOn("battery_saver") == true
+            if (!lowBatterySaid && !b.charging && b.percent in 1..15 && !saver && state == State.WAKE) {
+                lowBatterySaid = true
+                val say = "Battery's at ${b.percent} percent, boss. Shall I turn on battery saver?"
+                if (quietIsFine()) proactiveSay(say, followUp = true, pendingSteps = listOf(DeviceTask(kind = "toggle", target = "battery_saver", on = true)))
+                else Proactive.notify(this, ALERTS, "Battery low", "${b.percent}% left. Turn on battery saver to last longer.", id = 77)
+            }
+        }
+    }
+
+    /** [byUser]: asked for on the Friday screen (interrupts her); else scheduled (only when she's free). */
+    private fun startBriefing(kind: String, byUser: Boolean = true) {
+        when (state) {
+            State.WAKE -> Unit
+            State.COMMAND -> if (!byUser) return
+            State.SPEAKING -> if (byUser) { speakToken++; voice?.stop() } else return
+            State.BUSY -> return
+        }
+        if (runner.busy) return
+        state = State.BUSY
+        conversationOver = false
+        history.clear()
+        FridayBus.update { copy(lines = emptyList(), steps = emptyList(), heard = "", say = "") }
+        phase(FridayBus.Phase.THINKING)
+        hud("Your $kind briefing", "One moment, boss…", thinking = true)
+        ask(audio = null, Ask(text = "Give me my $kind briefing", briefing = kind))
+    }
+
+    // ---------- Voice check ----------
 
     // Voice check: the mic's audio for a few seconds, saved so the wake word can be tuned to a real voice.
     @Volatile private var check: ShortArray? = null
@@ -340,7 +540,7 @@ class JarvisService : Service() {
         checkWakes = 0
         if (mic == null || state != State.WAKE) return
         check = ShortArray(FridayWake.SAMPLE_RATE * 8)
-        ChatReaderService.running?.jarvisHud("Voice check", "Say \"Hey Friday\" three times, a second apart.")
+        hud("Voice check", "Say \"Hey Friday\" three times, a second apart.")
     }
 
     private fun recordCheck(chunk: ShortArray, woke: Boolean) {
@@ -352,7 +552,7 @@ class JarvisService : Service() {
         if (checkLength < buf.size) return
         check = null
         val wakes = checkWakes
-        val file = java.io.File(getExternalFilesDir(null), "friday_check.wav")
+        val file = File(getExternalFilesDir(null), "friday_check.wav")
         runCatching { file.writeBytes(Wav.encode(buf)) }
         Log.i(TAG, "friday: voice check heard $wakes, saved ${file.name}")
         state = State.BUSY
@@ -363,10 +563,12 @@ class JarvisService : Service() {
                 1 -> "I heard you once, boss."
                 else -> "I heard you $wakes times, boss."
             }
-            ChatReaderService.running?.jarvisHud("Voice check", say)
+            hud("Voice check", say)
             speak(say)
         }
     }
+
+    // ---------- Audio ----------
 
     /** 80 ms of audio, on the microphone (or self-test) thread. */
     private fun onChunk(chunk: ShortArray) {
@@ -399,8 +601,24 @@ class JarvisService : Service() {
                     main.post { beginCommand(before = before) }
                 }
             }
+            State.SPEAKING -> {
+                // "Friday, ..." while she talks: stop and listen.
+                if (wake?.process(chunk) == true) {
+                    Log.i(TAG, "friday: interrupted by the wake word")
+                    state = State.BUSY
+                    main.post {
+                        speakToken++
+                        voice?.stop()
+                        beginCommand(isFollowUp = true)
+                    }
+                }
+            }
             State.COMMAND -> {
-                main.post { ChatReaderService.running?.jarvisLevel((level / 5000.0).toFloat()) }
+                val l = (level / 5000.0).toFloat()
+                main.post {
+                    ChatReaderService.running?.jarvisLevel(l)
+                    FridayBus.update { copy(level = l) }
+                }
                 capture(chunk, level)
             }
             State.BUSY -> Unit
@@ -415,10 +633,24 @@ class JarvisService : Service() {
 
     // ---------- The command ----------
 
+    /** "Talk now": listen straight away (stops whatever Friday was saying). */
+    private fun talkNow() {
+        if (state == State.COMMAND) return
+        if (state == State.SPEAKING) {
+            speakToken++
+            voice?.stop()
+        }
+        if (runner.busy) runner.cancel()
+        beginCommand(isFollowUp = FridayBus.state.lines.isNotEmpty() && !conversationOver)
+    }
+
     private fun beginCommand(isFollowUp: Boolean = false, before: List<ShortArray> = emptyList()) {
         if (state == State.COMMAND) return
         followUp = isFollowUp
-        if (!isFollowUp) history.clear()
+        if (!isFollowUp) {
+            history.clear()
+            FridayBus.update { copy(lines = emptyList(), steps = emptyList(), heard = "", say = "") }
+        }
         commandLength = 0
         for (c in before) {
             c.copyInto(command, commandLength)
@@ -427,12 +659,48 @@ class JarvisService : Service() {
         fromWake = before.isNotEmpty()
         commandChunks = 0
         silentChunks = 0
+        spokenChunks = 0
         heardSpeech = false
-        skipChunks = CHIME_CHUNKS
+        // "Hey Friday" on its own (not "see you on Friday" mid-sentence): she greets if a pause follows.
+        greetPending = fromWake && !isFollowUp && Store.get(this).fridayGreeting && !talkingBefore(before)
+        val greeted = afterGreeting
+        afterGreeting = false
         hideToken++
-        chime(soft = isFollowUp)
-        ChatReaderService.running?.jarvisHud(if (isFollowUp) "Listening… (or say thanks)" else "Listening…")
+        if (greetPending) {
+            // The greeting is the answer, so no chime (it would also sound like speech to the mic).
+            skipChunks = 1
+            buzz()
+        } else {
+            skipChunks = CHIME_CHUNKS
+            chime(soft = isFollowUp)
+        }
+        phase(FridayBus.Phase.LISTENING)
+        hud(when {
+            greeted || !isFollowUp -> "Listening…"
+            pending != null -> "Listening… (yes or no)"
+            else -> "Listening… (or say thanks)"
+        })
         state = State.COMMAND
+    }
+
+    /** Was someone already talking before the wake word (so "Friday" was just a word in a sentence)? */
+    private fun talkingBefore(before: List<ShortArray>): Boolean {
+        // The last ~1 s is "Hey Friday" itself; look at what came before it.
+        val earlier = before.dropLast(13)
+        val loud = maxOf(noise * 3.5, 150.0)
+        return earlier.count { rms(it) > loud } >= 3
+    }
+
+    /** "Hey Friday" and a pause: "How can I help you, boss?", then listen for the command. */
+    private fun greet() {
+        Log.i(TAG, "friday: greeting")
+        // The greeting answered the wake word: what's said next is the command itself.
+        fromWake = false
+        afterGreeting = true
+        conversationOver = false
+        FridayBus.line(false, GREETING)
+        hud("Friday", GREETING)
+        speak(GREETING)
     }
 
     private fun capture(chunk: ShortArray, level: Double) {
@@ -446,10 +714,22 @@ class JarvisService : Service() {
         if (level > maxOf(noise * 3.5, 150.0)) {
             heardSpeech = true
             silentChunks = 0
+            spokenChunks++
         } else {
             silentChunks++
         }
-        val done = (heardSpeech && silentChunks >= END_SILENCE_CHUNKS) ||
+        if (greetPending) {
+            if (heardSpeech) {
+                greetPending = false  // "Hey Friday, play Kesariya" in one breath: no greeting
+            } else if (commandChunks >= GREET_WAIT_CHUNKS) {
+                greetPending = false
+                state = State.BUSY
+                main.post { greet() }
+                return
+            }
+        }
+        val endQuiet = if (spokenChunks < 8) END_SILENCE_EARLY else END_SILENCE_CHUNKS
+        val done = (heardSpeech && silentChunks >= endQuiet) ||
             (!heardSpeech && commandChunks >= (if (followUp) FOLLOW_UP_CHUNKS else NO_SPEECH_CHUNKS)) ||
             commandChunks >= MAX_COMMAND_CHUNKS
         if (!done) return
@@ -462,21 +742,62 @@ class JarvisService : Service() {
     }
 
     private fun send(pcm: ShortArray, speech: Boolean) {
-        val a11y = ChatReaderService.running
         if (!speech) {
             if (followUp) endConversation() else {
-                a11y?.jarvisHudHide()
+                ChatReaderService.running?.jarvisHudHide()
+                phase(FridayBus.Phase.IDLE)
                 resume()
             }
             return
         }
-        a11y?.jarvisHud("Thinking…", thinking = true)
+        phase(FridayBus.Phase.THINKING)
+        hud("Thinking…", thinking = true)
+        ask(Wav.encode(louder(pcm)), Ask())
+    }
+
+    /** A typed command from the Friday screen. */
+    private fun typed(text: String) {
+        if (text.isBlank()) return
+        if (state == State.SPEAKING) {
+            speakToken++
+            voice?.stop()
+        }
+        if (runner.busy) runner.cancel()
+        val fresh = conversationOver || FridayBus.state.lines.isEmpty()
+        if (fresh) history.clear()
+        conversationOver = false
+        followUp = !fresh
+        state = State.BUSY
+        FridayBus.line(true, text)
+        phase(FridayBus.Phase.THINKING)
+        hud("Thinking…", "“$text”", thinking = true)
+        ask(audio = null, Ask(text = text))
+    }
+
+    /** The floating orb, held: look at the screen and explain it. */
+    private fun lookNow() {
+        if (state == State.COMMAND || runner.busy) return
+        if (state == State.SPEAKING) {
+            speakToken++
+            voice?.stop()
+        }
+        state = State.BUSY
+        conversationOver = false
+        history.clear()
+        FridayBus.update { copy(lines = emptyList(), steps = emptyList()) }
+        lookAndAsk("What's on my screen? Explain it and tell me anything I should do.")
+    }
+
+    /** Sends a command to the server (audio, or text when Friday already knows what was said). */
+    private fun ask(audio: ByteArray?, a: Ask, screenImage: String? = null, screenText: List<String> = emptyList()) {
+        val a11y = ChatReaderService.running
         val context = a11y?.jarvisContext() ?: JarvisContext(app = "phone")
         val store = Store.get(this)
+        val memory = Memory.get(this)
         val contact = context.chatKey?.let { store.contact(it) }
         val body = ReplyApi.jarvisBody(
-            audio = Wav.encode(louder(pcm)),
-            wake = fromWake,
+            audio = audio,
+            wake = fromWake && audio != null && !a.looked,
             context = context,
             relationship = contact?.relationship ?: contact?.guessedRelationship,
             styleCardJson = store.styleCardJson,
@@ -491,24 +812,46 @@ class JarvisService : Service() {
             notificationsAllowed = NotificationWatcher.allowed(this),
             notifications = NotificationLog.get(this).recent(),
         )
+        val pend = pending?.takeIf { SystemClock.elapsedRealtime() - it.at < PENDING_FOR_MS }
+        if (pend == null) pending = null
         val api = store.api()
         io.execute {
-            // Usage times take a moment to add up: off the main thread.
+            // Usage times, the calendar and memory take a moment to gather: off the main thread.
             runCatching { body.put("habits", Habits.summary(this)) }
+            runCatching {
+                ReplyApi.addFridayContext(
+                    body,
+                    text = a.text,
+                    device = status.summary(),
+                    calendar = CalendarReader.lines(this).ifEmpty {
+                        if (CalendarReader.allowed(this)) emptyList() else listOf("calendar access is off")
+                    },
+                    tasks = memory.openTasks().map { t -> t.text + if (t.due > 0) " · due ${Memory.stamp(t.due)}" else "" },
+                    memories = memory.searchable(),
+                    routines = memory.routines().map { it.name to it.steps },
+                    pending = pend?.let { p -> p.question + " [" + p.steps.joinToString("; ") { TaskRunner.describe(it) } + "]" },
+                    screenText = screenText,
+                    screenImage = screenImage,
+                    looked = a.looked,
+                    failed = a.failed,
+                    briefing = a.briefing,
+                )
+            }
             val result = runCatching { api.jarvis(body) }
-            main.post { handle(result, context) }
+            main.post { handle(result, context, a) }
         }
     }
 
-    private fun handle(result: Result<JarvisResult>, context: JarvisContext) {
+    private fun handle(result: Result<JarvisResult>, context: JarvisContext, a: Ask) {
         val a11y = ChatReaderService.running
         result
             .onSuccess { r ->
-                Log.i(TAG, "jarvis: action=${r.action} task=${r.task?.kind}")
+                Log.i(TAG, "jarvis: action=${r.action} steps=${r.steps.map { it.kind }} confirm=${r.confirm}")
                 if (r.action == "ignore") {
                     // "Friday" was only a word in a sentence: back to waiting, quietly.
                     Log.i(TAG, "friday: not for me")
                     a11y?.jarvisHudHide()
+                    phase(FridayBus.Phase.IDLE)
                     resume()
                     return@onSuccess
                 }
@@ -516,29 +859,44 @@ class JarvisService : Service() {
                     Store.get(this).updateProfile(r.remember, r.forget)
                     Log.i(TAG, "friday: knows ${r.remember.size} new, forgot ${r.forget.size}")
                 }
-                var say = r.say
+                if (r.heard.isNotBlank() && a.text == null) FridayBus.line(true, r.heard)
+                FridayBus.update { copy(heard = r.heard) }
                 conversationOver = r.action == "end"
                 if (r.action == "end") a11y?.stopAutoScroll()
-                val locked = getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
-                if (r.action == "device" && r.task != null && locked && r.task.kind in NEEDS_SCREEN) {
-                    // Apps can't open over the lock screen: ask to unlock, then carry on.
-                    unlockWait = Triple(r.task, say, SystemClock.elapsedRealtime())
-                    say = "Unlock your phone, boss, and I'll do it."
-                    conversationOver = true
-                    askToUnlock()
-                } else if (r.action == "device" && r.task != null) {
-                    if (r.task.kind == "phone" && r.task.target == "screenshot") {
-                        // Out of the picture first.
-                        a11y?.jarvisHudHide()
-                        main.postDelayed({ device.run(r.task); speak(say) }, 450)
-                        history.addLast(r.heard to say)
-                        return
+                when (r.action) {
+                    "look" -> {
+                        hud("“${r.heard}”", r.say)
+                        lookAndAsk(r.heard)
+                        return@onSuccess
                     }
-                    val before = a11y?.foregroundPackage()
-                    device.run(r.task)?.let { say = it }
-                    checkOpened(r.task.kind, before)
+                    "confirm" -> {
+                        val p = pending
+                        pending = null
+                        FridayBus.update { copy(pending = null) }
+                        if (p != null) {
+                            runSteps(p.steps, "All done, boss.", r.heard, a)
+                            return@onSuccess
+                        }
+                    }
+                    "cancel" -> {
+                        pending = null
+                        FridayBus.update { copy(pending = null) }
+                    }
+                    "device" -> if (r.steps.isNotEmpty()) {
+                        if (r.confirm) {
+                            // Ask first; the steps wait for "yes".
+                            pending = Pending(r.steps, r.say, SystemClock.elapsedRealtime())
+                            FridayBus.update { copy(pending = r.say, steps = r.steps.map(TaskRunner::Step)) }
+                            a11y?.jarvisSteps(r.steps.map(TaskRunner::Step))
+                            conversationOver = false
+                            reply(r.heard, r.say)
+                            return@onSuccess
+                        }
+                        runSteps(r.steps, r.say, r.heard, a)
+                        return@onSuccess
+                    }
                 }
-                var caption = say
+                var caption = r.say
                 when (r.action) {
                     "write" -> r.compose?.let { c ->
                         if (c.ideas) {
@@ -550,19 +908,84 @@ class JarvisService : Service() {
                     }
                     "suggest" -> r.suggest?.let { a11y?.jarvisShow(context, suggest = it) }
                 }
-                a11y?.jarvisHud(if (r.heard.isNotBlank()) "“${r.heard}”" else "Friday", caption)
-                history.addLast(r.heard to say)
-                while (history.size > 4) history.removeFirst()
-                speak(say)
+                reply(r.heard, r.say, caption)
             }
             .onFailure { e ->
                 Log.w(TAG, "jarvis: failed (${e.javaClass.simpleName})")
                 val sorry = trouble(e)
                 conversationOver = true
-                a11y?.jarvisHud("Friday", sorry)
-                speak(sorry)
+                reply("", sorry)
             }
     }
+
+    /** Says [say] (showing [caption]), remembers the exchange, and keeps the conversation going. */
+    private fun reply(heard: String, say: String, caption: String = say) {
+        FridayBus.line(false, say)
+        FridayBus.update { copy(say = say) }
+        hud(if (heard.isNotBlank()) "“$heard”" else "Friday", caption)
+        history.addLast(heard to say)
+        while (history.size > 4) history.removeFirst()
+        if (heard.isNotBlank()) io.execute { Memory.get(this).logExchange(heard, say) }
+        speak(say)
+    }
+
+    /** Runs [steps] (checking each), then says how it went: [planned] if all of it worked. */
+    private fun runSteps(steps: List<DeviceTask>, planned: String, heard: String, a: Ask) {
+        val a11y = ChatReaderService.running
+        if (locked() && steps.any { it.kind in TaskRunner.NEEDS_SCREEN || (it.kind == "toggle" && it.target !in setOf("dnd")) }) {
+            // Apps can't open over the lock screen: ask to unlock, then carry on.
+            unlockWait = UnlockWait(steps, planned, heard, SystemClock.elapsedRealtime())
+            conversationOver = true
+            askToUnlock()
+            reply(heard, "Unlock your phone, boss, and I'll do it.")
+            return
+        }
+        if (steps.size == 1 && steps[0].kind == "phone" && steps[0].target == "screenshot") {
+            // Out of the picture first.
+            a11y?.jarvisHudHide()
+            main.postDelayed({ device.run(steps[0]) { reply(heard, planned) } }, 450)
+            return
+        }
+        phase(FridayBus.Phase.WORKING)
+        hud(if (heard.isNotBlank()) "“$heard”" else "Working…", planned)
+        runner.run(
+            steps,
+            update = { s ->
+                FridayBus.update { copy(steps = s.toList()) }
+                ChatReaderService.running?.jarvisSteps(s)
+            },
+            done = { report ->
+                Log.i(TAG, "friday: steps ok=${report.ok} failed=${report.failed.map { it.task.kind }}")
+                if (!report.ok && report.retryable && !a.looked && ChatReaderService.running != null) {
+                    // A button wasn't where Friday expected: look at the screen and try another way.
+                    lookAndAsk(heard, failed = report.failures())
+                    return@run
+                }
+                reply(heard, report.speech(planned))
+            },
+        )
+    }
+
+    /** Takes a screenshot (and the screen's words) and asks the server again with them. */
+    private fun lookAndAsk(heard: String, failed: List<String> = emptyList()) {
+        val a11y = ChatReaderService.running
+        if (a11y == null) {
+            reply(heard, "I need Vakya switched on in Accessibility to see your screen, boss.")
+            return
+        }
+        phase(FridayBus.Phase.LOOKING, seeing = true)
+        hud("Looking at your screen…", if (failed.isEmpty()) "Let me look, boss." else "That didn't work. Let me look again.")
+        main.postDelayed({
+            a11y.lookAtScreen { image, words ->
+                Log.i(TAG, "friday: looked (image=${image != null}, words=${words.size})")
+                phase(FridayBus.Phase.THINKING)
+                hud("Thinking…", thinking = true)
+                ask(audio = null, Ask(text = heard, looked = true, failed = failed), screenImage = image, screenText = words)
+            }
+        }, 0L)
+    }
+
+    private fun locked() = getSystemService(KeyguardManager::class.java)?.isKeyguardLocked == true
 
     private fun askToUnlock() {
         val from: Context = ChatReaderService.running ?: this
@@ -572,21 +995,18 @@ class JarvisService : Service() {
     }
 
     private fun afterUnlock(ok: Boolean) {
-        val (task, said, at) = unlockWait ?: return
-        unlockWait = null
+        val w = unlockWait ?: return
         Log.i(TAG, "friday: unlocked=$ok")
-        if (!ok || SystemClock.elapsedRealtime() - at > 60_000L) return
+        // No prompt (or it was dismissed): the task still waits for the user to unlock themselves.
+        if (!ok) return
+        unlockWait = null
+        if (SystemClock.elapsedRealtime() - w.at > 60_000L) return
         // A moment for the lock screen to go, then do what was asked.
         main.postDelayed({
-            val a11y = ChatReaderService.running
-            val before = a11y?.foregroundPackage()
-            val say = device.run(task) ?: said
-            checkOpened(task.kind, before)
-            if (state == State.WAKE) {
+            if (state == State.WAKE || state == State.BUSY) {
                 state = State.BUSY
                 conversationOver = true
-                a11y?.jarvisHud("Friday", say)
-                speak(say)
+                runSteps(w.steps, w.say, w.heard, Ask())
             }
         }, 500)
     }
@@ -600,37 +1020,18 @@ class JarvisService : Service() {
         return ShortArray(pcm.size) { (pcm[it] * gain).toInt().coerceIn(-32768, 32767).toShort() }
     }
 
-    private var lastBlockedHint = 0L
-
-    /**
-     * Some phones (vivo, Xiaomi, Oppo...) silently stop apps opening other apps from the
-     * background. If what Friday opened didn't come to the front, say what to allow.
-     */
-    private fun checkOpened(kind: String, before: String?) {
-        if (kind !in setOf("open_app", "play", "navigate", "search", "message")) return
-        val target = device.opened ?: return
-        if (target == before) return
-        main.postDelayed({
-            val now = ChatReaderService.running?.foregroundPackage()
-            val quiet = System.currentTimeMillis() - lastBlockedHint > 10 * 60_000L
-            if (now == before && now != target && quiet) {
-                lastBlockedHint = System.currentTimeMillis()
-                Log.w(TAG, "friday: the phone blocked opening $target")
-                ChatReaderService.running?.jarvisHud("Friday", "Your phone stopped me opening it. In Vakya, tap \"Let Friday open apps\".")
-                voice?.speak("Your phone stopped me opening it, boss. In Vakya, tap Let Friday open apps.") {}
-            }
-        }, 1800)
-    }
-
     private fun trouble(e: Throwable): String = when {
         e is ReplyApi.HttpError && e.code == 429 ->
             "We've used today's free replies, boss. Add your own Groq key in Vakya and I'm all yours."
         e is ReplyApi.HttpError && e.code == 404 -> "The Vakya server needs an update before I can do that, boss."
         e is ReplyApi.HttpError && e.code == 401 -> "The server didn't accept our key, boss. Check Vakya's settings."
+        e is ReplyApi.HttpError && e.code == 422 -> "The server couldn't take that request, boss. It may need an update."
         e is SocketTimeoutException -> "The server took too long, boss. Try me again."
         e is IOException -> "I can't reach the server right now, boss."
         else -> "Something went wrong on my end, boss."
     }
+
+    // ---------- Speaking ----------
 
     private fun speak(text: String) {
         val token = ++speakToken
@@ -640,13 +1041,17 @@ class JarvisService : Service() {
             done()
             return
         }
+        phase(FridayBus.Phase.SPEAKING, FridayBus.state.seeing)
+        // She can be interrupted by her name, unless she's saying it herself.
+        state = if (mic != null && !text.contains("friday", ignoreCase = true)) State.SPEAKING else State.BUSY
         v.speak(text) { main.post(done) }
         // If the speech engine never reports back, don't stay deaf.
         main.postDelayed(done, 4000L + text.length * 90L)
     }
 
-    /** After Jarvis speaks: keep listening for a follow-up, unless the conversation is over. */
+    /** After Friday speaks: keep listening for a follow-up, unless the conversation is over. */
     private fun doneSpeaking() {
+        state = State.BUSY
         if (!conversationOver && mic != null) {
             beginCommand(isFollowUp = true)
             return
@@ -656,21 +1061,48 @@ class JarvisService : Service() {
 
     private fun endConversation() {
         history.clear()
+        phase(FridayBus.Phase.IDLE)
         val token = ++hideToken
-        main.postDelayed({ if (token == hideToken) ChatReaderService.running?.jarvisHudHide() }, 2000)
+        main.postDelayed({
+            if (token == hideToken) {
+                ChatReaderService.running?.jarvisHudHide()
+                if (state == State.WAKE) FridayBus.update { copy(steps = emptyList()) }
+            }
+        }, 2500)
         resume()
+    }
+
+    /** The stop button: quiet at once, nothing more done. */
+    private fun interruptAll() {
+        Log.i(TAG, "friday: stopped by the user")
+        speakToken++
+        voice?.stop()
+        runner.cancel()
+        pending = null
+        unlockWait = null
+        conversationOver = true
+        state = State.BUSY
+        FridayBus.update { copy(pending = null) }
+        endConversation()
     }
 
     /** Back to waiting for "Hey Friday", with fresh audio so the last words can't fire again. */
     private fun resume() {
-        // A self-test without "Listen for Hey Friday" on: done, so don't stay in the notifications.
-        if (mic == null && !Store.get(this).jarvisOn) {
+        // Talked to (or a self-test) without "Listen for Hey Friday" on: done, so don't keep
+        // listening or stay in the notifications.
+        if (!Store.get(this).jarvisOn) {
             stopSelf()
             return
         }
         io.execute {
             wake?.reset()
             state = State.WAKE
+        }
+    }
+
+    private fun buzz() {
+        runCatching {
+            getSystemService(Vibrator::class.java)?.vibrate(VibrationEffect.createOneShot(30, VibrationEffect.DEFAULT_AMPLITUDE))
         }
     }
 

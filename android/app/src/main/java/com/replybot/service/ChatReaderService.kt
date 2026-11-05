@@ -23,6 +23,12 @@ import com.replybot.data.Suggestion
 import com.replybot.jarvis.ResultPicker
 import com.replybot.offline.QuickReplies
 import java.util.concurrent.Executors
+import android.content.Intent
+import com.replybot.accessibility.ScreenAgent
+import com.replybot.agent.FridayBus
+import com.replybot.agent.TaskRunner
+import com.replybot.jarvis.JarvisService
+import com.replybot.vision.ScreenLook
 
 class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
 
@@ -84,6 +90,11 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         overlay = Overlay(this, this)
         running = this
         applyAppChoice()
+        registerReceiver(screenReceiver, android.content.IntentFilter().apply {
+            addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(Intent.ACTION_USER_PRESENT)
+        })
+        applyFloating()
     }
 
     /**
@@ -115,7 +126,11 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     override fun onDestroy() {
         if (running === this) running = null
         main.removeCallbacksAndMessages(null)
-        if (::overlay.isInitialized) overlay.hideAll()
+        runCatching { unregisterReceiver(screenReceiver) }
+        if (::overlay.isInitialized) {
+            overlay.hideAll()
+            overlay.hideFloating()
+        }
         io.shutdownNow()
         super.onDestroy()
     }
@@ -399,10 +414,10 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
      * results have finished loading. Tries for ~10 s.
      */
     fun jarvisTapResult(query: String, pkg: String, tries: Int = 0, last: String? = null) {
-        val root = rootInActiveWindow
+        val roots = appRoots(pkg)
         var seen: String? = null
-        if (root != null && root.packageName?.toString() == pkg) {
-            val rows = resultRows(root)
+        if (roots.isNotEmpty()) {
+            val rows = roots.flatMap(::resultRows)
             val pick = ResultPicker.pick(rows.map { it.first }, query, waited = tries >= 6)
             seen = pick?.text
             if (pick != null && seen == last && click(rows.first { it.first === pick }.second)) {
@@ -415,16 +430,34 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
         else Log.w("Vakya", "friday: found nothing to play in $pkg")
     }
 
+    /**
+     * [pkg]'s app windows, biggest first. Not just the "active" one: Spotify keeps an invisible
+     * pop-up of its own on top of its search results, and that's the window Android calls active.
+     */
+    private fun appRoots(pkg: String): List<AccessibilityNodeInfo> {
+        val found = runCatching { windows }.getOrDefault(emptyList())
+            .filter { it.type == android.view.accessibility.AccessibilityWindowInfo.TYPE_APPLICATION }
+            .mapNotNull { w ->
+                val root = w.root ?: return@mapNotNull null
+                if (root.packageName?.toString() != pkg) return@mapNotNull null
+                val r = android.graphics.Rect().also(w::getBoundsInScreen)
+                root to r.width() * r.height()
+            }
+            .sortedByDescending { it.second }
+            .map { it.first }
+        return found.ifEmpty { listOfNotNull(rootInActiveWindow?.takeIf { it.packageName?.toString() == pkg }) }
+    }
+
     /** The results list: wide, tappable rows between the search box and the player bar, with their words. */
     private fun resultRows(root: AccessibilityNodeInfo): List<Pair<ResultPicker.Row, AccessibilityNodeInfo>> {
-        val screen = ChatReader.bounds(root)
-        val top = screen.top + screen.height() * 0.12
-        val bottom = screen.top + screen.height() * 0.85
+        val m = resources.displayMetrics
+        val top = m.heightPixels * 0.12
+        val bottom = m.heightPixels * 0.85
         val rows = mutableListOf<Pair<ResultPicker.Row, AccessibilityNodeInfo>>()
         walk(root) { n ->
             if (!n.isClickable || !n.isVisibleToUser || n.isEditable) return@walk
             val r = ChatReader.bounds(n)
-            if (r.top < top || r.top > bottom || r.width() < screen.width() * 0.6) return@walk
+            if (r.top < top || r.top > bottom || r.width() < m.widthPixels * 0.6) return@walk
             val text = rowText(n)
             if (text.isNotBlank()) rows += ResultPicker.Row(r.top, text) to n
         }
@@ -450,10 +483,8 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
     /** Tapped a result but nothing plays (an album or artist page opened): press that page's own Play. */
     private fun pressPlayIfQuiet(pkg: String) {
         if (getSystemService(android.media.AudioManager::class.java)?.isMusicActive == true) return
-        val root = rootInActiveWindow ?: return
-        if (root.packageName?.toString() != pkg) return
-        val screen = ChatReader.bounds(root)
-        val above = screen.top + screen.height() * 0.7  // not the player bar at the bottom
+        val root = appRoots(pkg).firstOrNull() ?: return
+        val above = resources.displayMetrics.heightPixels * 0.7  // not the player bar at the bottom
         var play: AccessibilityNodeInfo? = null
         walk(root) { n ->
             if (play != null || !n.isVisibleToUser || ChatReader.bounds(n).top > above) return@walk
@@ -556,6 +587,54 @@ class ChatReaderService : AccessibilityService(), Overlay.Callbacks {
 
     fun jarvisHud(state: String, caption: String? = null, thinking: Boolean = false) =
         overlay.showJarvis(state, caption, thinking)
+
+    fun jarvisPhase(phase: FridayBus.Phase, seeing: Boolean) = overlay.jarvisPhase(phase, seeing)
+
+    fun jarvisSteps(steps: List<TaskRunner.Step>) = overlay.jarvisSteps(steps)
+
+    private val screenAgent by lazy { ScreenAgent(this) }
+
+    /** Friday's eyes and fingers on whatever app is open. */
+    fun screen(): ScreenAgent = screenAgent
+
+    /**
+     * "What's on my screen?": the words and buttons on screen, and a screenshot (Android 11+),
+     * taken with Vakya's own windows hidden. Called only when the user asks about the screen.
+     */
+    fun lookAtScreen(done: (image: String?, words: List<String>) -> Unit) {
+        overlay.hideForCapture()
+        main.postDelayed({
+            val words = runCatching { screenAgent.screenText() }.getOrDefault(emptyList())
+            ScreenLook.capture(this, io) { image ->
+                main.post {
+                    overlay.showAfterCapture()
+                    done(image, words)
+                }
+            }
+        }, 250)
+    }
+
+    // ---------- Floating Friday ----------
+
+    /** The floating orb shows while it's switched on in Vakya and the phone is unlocked. */
+    fun applyFloating() {
+        val locked = getSystemService(android.app.KeyguardManager::class.java)?.isKeyguardLocked == true
+        if (store.floatingFriday && !locked) overlay.showFloating() else overlay.hideFloating()
+    }
+
+    private val screenReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            if (intent.action == Intent.ACTION_SCREEN_OFF) overlay.hideFloating() else applyFloating()
+        }
+    }
+
+    override fun onHudTap() = JarvisService.command(this, JarvisService.ACTION_TALK)
+
+    override fun onHudStop() = JarvisService.interrupt()
+
+    override fun onFridayTap() = JarvisService.command(this, JarvisService.ACTION_TALK)
+
+    override fun onFridayLook() = JarvisService.command(this, JarvisService.ACTION_LOOK)
 
     fun jarvisLevel(level: Float) = overlay.jarvisLevel(level)
 

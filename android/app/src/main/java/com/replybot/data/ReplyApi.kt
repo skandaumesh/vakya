@@ -124,7 +124,7 @@ class ReplyApi(
 
         /** [audio]: a WAV of the command; [context]: what's on screen. */
         fun jarvisBody(
-            audio: ByteArray,
+            audio: ByteArray?,
             context: JarvisContext,
             relationship: String?,
             styleCardJson: String?,
@@ -154,7 +154,7 @@ class ReplyApi(
                 JSONObject().put("heard", heard.take(500)).put("say", say.take(500))
             }))
             .put("notes", JSONArray(notes.takeLast(30)))
-            .put("audio", android.util.Base64.encodeToString(audio, android.util.Base64.NO_WRAP))
+            .apply { if (audio != null) put("audio", android.util.Base64.encodeToString(audio, android.util.Base64.NO_WRAP)) }
             .put("app", context.app)
             .put("in_chat", context.inChat)
             .put("chat_title", context.chatTitle)
@@ -178,22 +178,61 @@ class ReplyApi(
             say = j.optString("say"),
             compose = j.optJSONObject("compose")?.let(::parseCompose),
             suggest = j.optJSONObject("suggest")?.let(::parseResult),
-            task = j.optJSONObject("task")?.let {
-                DeviceTask(
-                    kind = it.optString("kind", "none"),
-                    time = it.optString("time"),
-                    seconds = it.optInt("seconds"),
-                    label = it.optString("label"),
-                    app = it.optString("app"),
-                    contact = it.optString("contact"),
-                    text = it.optString("text"),
-                    on = it.optBoolean("on", true),
-                    target = it.optString("target"),
-                )
-            },
+            task = j.optJSONObject("task")?.let(::parseTask),
+            steps = j.optJSONArray("steps")?.let { a -> (0 until a.length()).map { parseTask(a.getJSONObject(it)) } }
+                ?.takeIf { it.isNotEmpty() } ?: listOfNotNull(j.optJSONObject("task")?.let(::parseTask)),
+            confirm = j.optBoolean("confirm"),
             remember = j.optJSONArray("remember")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty(),
             forget = j.optJSONArray("forget")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty(),
         )
+
+        fun parseTask(it: JSONObject) = DeviceTask(
+            kind = it.optString("kind", "none"),
+            time = it.optString("time"),
+            seconds = it.optInt("seconds"),
+            label = it.optString("label"),
+            app = it.optString("app"),
+            contact = it.optString("contact"),
+            text = it.optString("text"),
+            on = it.optBoolean("on", true),
+            target = it.optString("target"),
+            value = it.optInt("value", -1),
+        )
+
+        /**
+         * Friday 0.9's extra context, added to a [jarvisBody]: the phone's state, schedule, memory
+         * (searched on the server; only matches reach the AI), routines, and the screen when she looks.
+         */
+        fun addFridayContext(
+            body: JSONObject,
+            text: String? = null,
+            device: String? = null,
+            calendar: List<String> = emptyList(),
+            tasks: List<String> = emptyList(),
+            memories: List<String> = emptyList(),
+            routines: List<Pair<String, String>> = emptyList(),
+            pending: String? = null,
+            screenText: List<String> = emptyList(),
+            screenImage: String? = null,
+            looked: Boolean = false,
+            failed: List<String> = emptyList(),
+            briefing: String? = null,
+        ): JSONObject = body.apply {
+            if (text != null) put("text", text.take(1000))
+            device?.let { put("device", it.take(400)) }
+            put("calendar", JSONArray(calendar.take(30).map { it.take(200) }))
+            put("tasks", JSONArray(tasks.take(40).map { it.take(200) }))
+            put("memories", JSONArray(memories.takeLast(300).map { it.take(300) }))
+            put("routines", JSONArray(routines.take(20).map { (name, steps) ->
+                JSONObject().put("name", name.take(60)).put("steps", steps.take(500))
+            }))
+            pending?.let { put("pending", it.take(500)) }
+            put("screen_text", JSONArray(screenText.take(150).map { it.take(200) }))
+            screenImage?.let { put("screen_image", it) }
+            put("looked", looked)
+            put("failed", JSONArray(failed.take(6).map { it.take(200) }))
+            briefing?.let { put("briefing", it) }
+        }
 
         fun parseCompose(j: JSONObject): ComposeResult {
             val ideas = j.optString("kind") == "ideas"

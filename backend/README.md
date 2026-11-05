@@ -55,11 +55,13 @@ The first run builds a style card from your messages and saves it as `<chat>.sty
 |---|---|---|
 | `POST /suggest` | chat messages, relationship, style, style card, examples, memory, draft, `language` (`auto`, `english`, `kanglish`, `kannada`, `hinglish`) | intent, 3 `{label, text}` options, memory updates |
 | `POST /compose` | `intent` (what I want to say, in rough words), plus the chat, relationship, style card, examples, memory | `kind`, `meaning`, and either the message once per style (`variants`: `mine`, `professional`, `short`, `genz`) or, when `intent` asks for something to send ("pickup line"), 4 labelled `ideas` |
-| `POST /jarvis` | `audio` (base64 WAV of a spoken command) or `text`, plus what's on screen (`in_chat`, chat, style card, language, `local_time`) | `heard`, `action` (write, suggest, read, answer), `say` (spoken reply), and `compose` or `suggest` results |
+| `POST /jarvis` | `audio` (base64 WAV of a spoken command) or `text`, plus what's on screen (`in_chat`, chat, style card, language, `local_time`) and Friday's context: `device` status, `calendar`, `tasks`, `memories` (searched here, only matches reach the AI), `routines`, `pending` steps, and when she looks, `screen_image` / `screen_text` (`looked`, `failed`) | `heard`, `action` (write, suggest, read, answer, device, look, confirm, cancel, end, ignore), `say` (spoken reply), `steps` (phone tasks in order, at most 6; `task` is the first, for older phones), `confirm` (ask before running), and `compose` or `suggest` results |
 | `POST /style-card` | `{"my_messages": [...]}` (5+) | style card to store on the device |
 | `GET /health` | | `{"ok": true, "model": "groq/openai/gpt-oss-120b"}` |
 
 Set `VAKYA_APP_KEY` to require an `X-Vakya-Key` header.
+
+Friday's system prompt is a core plus sections added only when their context is sent (screen, memory, schedule, routines, briefing, notifications, usage), to save tokens on free tiers. Common commands ("turn on wifi", "set brightness to 40", "yes" to pending steps, "what's on my screen?") are answered in `app/quick.py` without a model call. Memory search (`app/recall.py`) is BM25 over the phone's items; nothing is stored on the server.
 
 ## Tests and eval
 

@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 Intent = Literal[
     "QUESTION",
@@ -191,36 +191,53 @@ class ComposeResponse(ComposeOutput):
     latency_ms: int
 
 
-# ---------- Jarvis: "Hey Jarvis" + a spoken command ----------
+# ---------- Friday ("Hey Friday" + a spoken command; Jarvis in the code) ----------
 
-JarvisAction = Literal["write", "suggest", "read", "answer", "device", "end"]
+# look: Friday needs to see the screen first (the phone takes a screenshot and asks again).
+# confirm / cancel: the user said yes / no to steps Friday asked about ("Shall I?").
+JarvisAction = Literal["write", "suggest", "read", "answer", "device", "end", "look", "confirm", "cancel"]
 # "ignore": the wake word was only a word in a sentence ("see you on Friday"); stay quiet.
-JarvisReply = Literal["write", "suggest", "read", "answer", "device", "end", "ignore"]
+JarvisReply = Literal["write", "suggest", "read", "answer", "device", "end", "look", "confirm", "cancel", "ignore"]
 
 DeviceTaskKind = Literal[
     "none", "alarm", "timer", "open_app", "call", "message", "play", "navigate", "search",
     "flashlight", "battery", "phone", "settings", "volume", "note_add", "notes_read", "notes_clear", "send",
     "scroll", "media",
+    # 0.9: switches, the screen, tasks, calendar, files, routines.
+    "toggle", "brightness", "tap", "type", "task_add", "task_done", "calendar_add", "files", "routine_save",
 ]
+
+# What a toggle step can switch. The phone flips it with Android's own API where there is one,
+# else the Quick Settings tile, and checks it really changed.
+TOGGLE_TARGETS = (
+    "wifi", "bluetooth", "mobile_data", "dnd", "battery_saver", "rotation", "airplane", "hotspot",
+    "location", "dark_mode", "nfc",
+)
 
 
 class DeviceTask(BaseModel):
     """Something to do on the phone itself; only the fields the kind needs are filled."""
 
     kind: DeviceTaskKind = "none"
-    time: str = Field(default="", description="alarm: 24-hour HH:MM.")
-    seconds: int = Field(default=0, description="timer: length in seconds.")
-    label: str = Field(default="", description="alarm/timer: what it's for, e.g. 'call Amma'.")
-    app: str = Field(default="", description="open_app: the app's name; message: whatsapp or sms; play: youtube, spotify or empty.")
+    time: str = Field(default="", description="alarm: 24-hour HH:MM. task_add (optional) and calendar_add: 'YYYY-MM-DD HH:MM'.")
+    seconds: int = Field(default=0, description="timer: length in seconds. calendar_add: how long (default 3600).")
+    label: str = Field(default="", description="alarm/timer: what it's for, e.g. 'call Amma'. routine_save: the routine's name.")
+    app: str = Field(default="", description="open_app: the app's name; message: whatsapp, telegram or sms; play: youtube, spotify or empty.")
     contact: str = Field(default="", description="call/message: the name or number as I said it.")
-    text: str = Field(default="", description="message text, song/video to play, place, search query, or note.")
-    on: bool = Field(default=True, description="flashlight on/off; volume up (true) or down (false).")
+    text: str = Field(
+        default="",
+        description="message text, song/video to play, place, search query, note, task, event title, "
+        "tap: the button's words as on screen, type: what to type, routine_save: what the routine does.",
+    )
+    on: bool = Field(default=True, description="flashlight/toggle on or off; volume/brightness up (true) or down (false).")
     target: str = Field(
         default="",
-        description="phone: home, back, recents, notifications, quick_settings, lock, screenshot. "
-        "settings: wifi, bluetooth, internet, volume, display, battery. volume: mute or empty. "
-        "media: play, pause, next or previous.",
+        description="phone: home, back, recents, last_app, notifications, quick_settings, lock, screenshot. "
+        "settings: wifi, bluetooth, internet, volume, display, battery, sound, apps, location, storage. "
+        "toggle: wifi, bluetooth, mobile_data, dnd, battery_saver, rotation, airplane, hotspot, location, dark_mode, nfc. "
+        "volume: mute, unmute or empty. media: play, pause, next or previous. files: downloads, photos, documents or music.",
     )
+    value: int = Field(default=-1, description="brightness or volume: the level to set, 0-100. Else -1.")
 
 
 class JarvisTurn(BaseModel):
@@ -239,8 +256,15 @@ class PhoneNotification(BaseModel):
     when: str = Field(default="", max_length=30, description="e.g. '5 min ago', '2:14 pm', 'yesterday 9:30 pm'.")
 
 
+class Routine(BaseModel):
+    """A routine I set up: say its name ("I'm going to sleep") and Friday does what it says."""
+
+    name: str = Field(max_length=60)
+    steps: str = Field(max_length=500, description="What to do, in plain words: 'do not disturb on, brightness low, alarm 6:30'.")
+
+
 class JarvisRequest(BaseModel):
-    """A voice command (said after "Hey Jarvis") and what's on the phone's screen."""
+    """A voice command (said after "Hey Friday") and what's on the phone's screen."""
 
     audio: str | None = Field(
         default=None, max_length=1_000_000, description="Base64 WAV of the command, 16 kHz mono, up to ~10 s."
@@ -265,6 +289,28 @@ class JarvisRequest(BaseModel):
     notifications_allowed: bool = False
     notifications: list[PhoneNotification] = Field(default_factory=list, max_length=40, description="Recent ones, newest first.")
     habits: str | None = Field(default=None, max_length=3000, description="How I use the phone, from Android's usage stats.")
+    # 0.9
+    device: str | None = Field(default=None, max_length=400, description="Phone status: battery, Wi-Fi, Bluetooth, Do Not Disturb...")
+    screen_text: list[str] = Field(
+        default_factory=list, max_length=150,
+        description="Words and buttons on screen, from Android's accessibility tree, top to bottom.",
+    )
+    screen_image: str | None = Field(default=None, max_length=900_000, description="Base64 JPEG screenshot, sent only when Friday looks.")
+    looked: bool = Field(default=False, description="Friday asking again after looking at the screen, or after a step failed.")
+    failed: list[str] = Field(default_factory=list, max_length=6, description="Steps that just failed on the phone, and why.")
+    calendar: list[str] = Field(default_factory=list, max_length=30, description="My next events: 'Tue 4 Nov 3:00 pm-4:00 pm · Design review'.")
+    tasks: list[str] = Field(default_factory=list, max_length=40, description="My open tasks and reminders, with when they're due.")
+    memories: list[str] = Field(
+        default_factory=list, max_length=300,
+        description="Everything else Friday remembers on the phone (people, promises, past conversations). "
+        "Searched here; only the matches reach the AI.",
+    )
+    routines: list[Routine] = Field(default_factory=list, max_length=20)
+    pending: str | None = Field(default=None, max_length=500, description="Steps waiting for my yes, if Friday just asked.")
+    briefing: Literal["morning", "evening", "day"] | None = Field(default=None, description="Asked for a spoken briefing.")
+
+
+MAX_STEPS = 6
 
 
 class JarvisPlan(BaseModel):
@@ -273,8 +319,11 @@ class JarvisPlan(BaseModel):
     heard: str = Field(description="What I said, with obvious speech-to-text mistakes fixed.")
     action: JarvisAction
     intent: str = Field(default="", description="write: what to write, in my words. Else empty.")
-    task: DeviceTask = Field(default_factory=DeviceTask, description="device: what to do on the phone. Else kind none.")
-    say: str = Field(description="Jarvis's spoken answer: 1-2 short sentences.")
+    steps: list[DeviceTask] = Field(
+        default_factory=list, description="device: what to do on the phone, in order (1 to 6 steps). Else empty.",
+    )
+    confirm: bool = Field(default=False, description="device: true to ask me first, doing the steps only after I say yes.")
+    say: str = Field(description="Friday's spoken answer: 1-2 short sentences.")
     remember: list[str] = Field(
         default_factory=list,
         description="New lasting facts about me to keep, each a short note like 'Name: Skanda'. Usually empty.",
@@ -283,6 +332,22 @@ class JarvisPlan(BaseModel):
         default_factory=list, description="Lines from <about_boss> to delete because I asked. Usually empty."
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def _one_task(cls, data):
+        """JarvisPlan(task=...) is a plan with that one step."""
+        if isinstance(data, dict) and "task" in data:
+            data = dict(data)
+            task = data.pop("task")
+            if task is not None and not data.get("steps"):
+                data["steps"] = [task]
+        return data
+
+    @property
+    def task(self) -> DeviceTask:
+        """The first step (kind none when there isn't one)."""
+        return self.steps[0] if self.steps else DeviceTask()
+
 
 class JarvisResponse(BaseModel):
     heard: str
@@ -290,7 +355,9 @@ class JarvisResponse(BaseModel):
     say: str
     compose: ComposeResponse | None = None
     suggest: SuggestResponse | None = None
-    task: DeviceTask | None = None
+    task: DeviceTask | None = Field(default=None, description="The first step, for phones older than 0.9.")
+    steps: list[DeviceTask] = Field(default_factory=list)
+    confirm: bool = False
     remember: list[str] = Field(default_factory=list)
     forget: list[str] = Field(default_factory=list)
     latency_ms: int

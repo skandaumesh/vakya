@@ -52,8 +52,12 @@ data class JarvisResult(
     val compose: ComposeResult?,
     /** suggest: reply options. */
     val suggest: SuggestResult?,
-    /** device: a task for the phone (alarm, call, open an app...). */
+    /** device: the first task for the phone (alarm, call, open an app...). */
     val task: DeviceTask?,
+    /** device: every step, in order (0.9: "message Amma and remind me at 8" is two). */
+    val steps: List<DeviceTask> = listOfNotNull(task),
+    /** Ask first: hold [steps] until the user says yes. */
+    val confirm: Boolean = false,
     /** New facts about the user for Friday to keep ("Name: Skanda"). */
     val remember: List<String> = emptyList(),
     /** Facts the user asked Friday to forget. */
@@ -71,6 +75,8 @@ data class DeviceTask(
     val text: String = "",
     val on: Boolean = true,
     val target: String = "",
+    /** brightness/volume: the level to set, 0-100 (-1: none). */
+    val value: Int = -1,
 )
 
 /** What's on screen when Friday is called: the app, and the open chat if there is one. */

@@ -25,8 +25,8 @@ android {
         applicationId = "com.onezerolabs.vakya"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "0.8.0"
+        versionCode = 15
+        versionName = "0.9.0"
         // Debug builds talk to the laptop over USB (adb reverse); no key needed locally.
         buildConfigField("String", "DEFAULT_SERVER_URL", "\"http://localhost:8000\"")
         buildConfigField("String", "APP_KEY", "\"\"")

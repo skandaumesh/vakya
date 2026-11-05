@@ -20,7 +20,9 @@ import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
 import com.replybot.R
-import com.replybot.jarvis.ArcReactorView
+import com.replybot.agent.FridayBus
+import com.replybot.agent.TaskRunner
+import com.replybot.ui.OrbView
 import com.replybot.data.ComposeResult
 import com.replybot.data.LANGUAGES
 import com.replybot.data.STYLES
@@ -46,6 +48,14 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         fun onRepliesInstead()
         fun onLanguageChange(language: String)
         fun onWriteTyped()
+        /** Friday's card at the top was tapped: listen (or listen again). */
+        fun onHudTap()
+        /** Friday's HUD stop button: stop talking and doing. */
+        fun onHudStop()
+        /** The floating orb was tapped: talk to Friday. */
+        fun onFridayTap()
+        /** The floating orb was held: Friday looks at the screen. */
+        fun onFridayLook()
     }
 
     private companion object {
@@ -73,7 +83,7 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
     private val serif by lazy { ctx.resources.getFont(R.font.instrument_serif) }
 
     private var jarvis: LinearLayout? = null
-    private var jarvisRing: ArcReactorView? = null
+    private var jarvisRing: OrbView? = null
     private var jarvisState: TextView? = null
     private var jarvisCaption: TextView? = null
 
@@ -236,20 +246,32 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         bubbleParams = null
     }
 
-    // ---------- Jarvis ----------
+    // ---------- Friday ----------
+
+    private var hudSteps: LinearLayout? = null
+    private var hudEye: TextView? = null
 
     /**
-     * Friday's glowing ring at the top of the screen with what it's doing ([state]) and says
-     * ([caption]). It never takes touches, so the app underneath stays usable.
+     * Friday's HUD at the top of the screen: her orb, what she's doing ([state]) and saying
+     * ([caption]), the steps she's working through, and a stop button. Tap it to talk to her.
+     * It's all of Friday there is on screen: only the card takes touches, the app stays usable.
      */
     fun showJarvis(state: String, caption: String?, thinking: Boolean = false) {
         if (jarvis == null) {
-            val ring = ArcReactorView(ctx)
+            val ring = OrbView(ctx, compact = true)
             val title = TextView(ctx).apply {
-                text = "F R I D A Y"
-                textSize = 11f
-                typeface = Typeface.DEFAULT_BOLD
+                text = "F . R . I . D . A . Y"
+                textSize = 10.5f
+                letterSpacing = 0.12f
+                typeface = Typeface.create("monospace", Typeface.BOLD)
                 setTextColor(0xFF5CE1FF.toInt())
+            }
+            val eye = TextView(ctx).apply {
+                text = "  ◉ SEEING SCREEN"
+                textSize = 10f
+                typeface = Typeface.create("monospace", Typeface.BOLD)
+                setTextColor(0xFF2EE6C8.toInt())
+                visibility = View.GONE
             }
             val status = TextView(ctx).apply {
                 textSize = 13f
@@ -262,22 +284,45 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
                 ellipsize = TextUtils.TruncateAt.END
                 setPadding(0, px(4), 0, 0)
             }
-            val text = LinearLayout(ctx).apply {
+            val steps = LinearLayout(ctx).apply {
                 orientation = LinearLayout.VERTICAL
-                addView(title)
+                setPadding(0, px(4), 0, 0)
+                visibility = View.GONE
+            }
+            val textCol = LinearLayout(ctx).apply {
+                orientation = LinearLayout.VERTICAL
+                addView(LinearLayout(ctx).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(title)
+                    addView(eye)
+                })
                 addView(status)
                 addView(words)
+                addView(steps)
+            }
+            val stop = TextView(ctx).apply {
+                text = "✕"
+                textSize = 16f
+                gravity = Gravity.CENTER
+                setTextColor(0xFF9FDFFF.toInt())
+                background = rounded(0x225CE1FF, 999, stroke = 0x555CE1FF)
+                contentDescription = "Stop Friday"
+                setOnClickListener { cb.onHudStop() }
             }
             val card = LinearLayout(ctx).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                setPadding(px(14), px(12), px(18), px(12))
-                background = rounded(0xEB07101F.toInt(), 22, stroke = 0x995CE1FF.toInt())
-                addView(ring, LinearLayout.LayoutParams(px(64), px(64)).apply { marginEnd = px(14) })
-                addView(text, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                setPadding(px(12), px(12), px(12), px(12))
+                background = GradientDrawable(GradientDrawable.Orientation.TL_BR, intArrayOf(0xF2061226.toInt(), 0xF20A1B33.toInt())).apply {
+                    cornerRadius = px(22).toFloat()
+                    setStroke(px(1), 0x995CE1FF.toInt())
+                }
+                addView(ring, LinearLayout.LayoutParams(px(64), px(64)).apply { marginEnd = px(12) })
+                addView(textCol, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+                addView(stop, LinearLayout.LayoutParams(px(32), px(32)).apply { marginStart = px(8) })
+                setOnClickListener { cb.onHudTap() }
             }
             val p = windowParams().apply {
-                flags = flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
                 width = ctx.resources.displayMetrics.widthPixels - px(24)
                 x = px(12)
                 y = px(56)
@@ -287,16 +332,50 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
             jarvisRing = ring
             jarvisState = status
             jarvisCaption = words
+            hudSteps = steps
+            hudEye = eye
         }
         jarvisState?.text = state
         jarvisCaption?.text = caption.orEmpty()
         jarvisCaption?.visibility = if (caption.isNullOrBlank()) View.GONE else View.VISIBLE
-        jarvisRing?.thinking = thinking
+        if (thinking) jarvisRing?.phase = FridayBus.Phase.THINKING
     }
 
-    /** How loud the microphone is (0..1), for the ring's pulse. */
+    /** The orb's colour and pace, and the eye while the screen is being looked at. */
+    fun jarvisPhase(phase: FridayBus.Phase, seeing: Boolean) {
+        jarvisRing?.phase = phase
+        hudEye?.visibility = if (seeing) View.VISIBLE else View.GONE
+        floatingOrb?.phase = phase
+    }
+
+    /** The steps Friday is working through, each with ✓, ✗, ● (doing) or ○ (waiting). */
+    fun jarvisSteps(steps: List<TaskRunner.Step>) {
+        val box = hudSteps ?: return
+        box.removeAllViews()
+        box.visibility = if (steps.size > 1 || steps.any { it.status == TaskRunner.Status.FAILED }) View.VISIBLE else View.GONE
+        steps.take(6).forEach { s ->
+            val (mark, color) = when (s.status) {
+                TaskRunner.Status.DONE -> "✓" to 0xFF34D399.toInt()
+                TaskRunner.Status.FAILED -> "✗" to 0xFFF87171.toInt()
+                TaskRunner.Status.RUNNING -> "●" to 0xFF5CE1FF.toInt()
+                TaskRunner.Status.SKIPPED -> "–" to 0xFF6B8AA3.toInt()
+                TaskRunner.Status.WAITING -> "○" to 0xFF6B8AA3.toInt()
+            }
+            box.addView(TextView(ctx).apply {
+                text = "$mark  ${s.title}"
+                textSize = 12.5f
+                typeface = Typeface.create("monospace", Typeface.NORMAL)
+                setTextColor(color)
+                maxLines = 1
+                ellipsize = TextUtils.TruncateAt.END
+            })
+        }
+    }
+
+    /** How loud the microphone is (0..1), for the orb's pulse. */
     fun jarvisLevel(level: Float) {
         jarvisRing?.level = level
+        floatingOrb?.level = level
     }
 
     fun hideJarvis() {
@@ -305,6 +384,119 @@ class Overlay(private val ctx: Context, private val cb: Callbacks) {
         jarvisRing = null
         jarvisState = null
         jarvisCaption = null
+        hudSteps = null
+        hudEye = null
+    }
+
+    // ---------- Floating Friday ----------
+
+    private var floating: View? = null
+    private var floatingParams: WindowManager.LayoutParams? = null
+    private var floatingOrb: OrbView? = null
+
+    val isFloatingShown get() = floating != null
+
+    /** A small glowing orb on the edge of the screen: tap to talk to Friday, hold to have her look at the screen. */
+    fun showFloating() {
+        if (floating != null) return
+        val size = px(58)
+        val orb = OrbView(ctx, compact = true).apply { phase = FridayBus.state.phase.takeIf { it != FridayBus.Phase.OFF } ?: FridayBus.Phase.IDLE }
+        val view = FrameLayout(ctx).apply {
+            background = GradientDrawable().apply {
+                shape = GradientDrawable.OVAL
+                setColor(0xCC050C18.toInt())
+                setStroke(px(1), 0x885CE1FF.toInt())
+            }
+            setPadding(px(3), px(3), px(3), px(3))
+            addView(orb, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            contentDescription = "Friday: tap to talk, hold to look at the screen, drag to move"
+        }
+        val m = ctx.resources.displayMetrics
+        val (sx, sy) = Store.get(ctx).floatingPos
+        val p = windowParams().apply {
+            width = size
+            height = size
+            x = if (sx < 0) m.widthPixels - size - px(6) else clampX(sx, size)
+            y = if (sy < 0) (m.heightPixels * 0.62f).roundToInt() else clampY(sy, size)
+        }
+        view.setOnTouchListener(floatingTouch(size))
+        wm.addView(view, p)
+        floating = view
+        floatingParams = p
+        floatingOrb = orb
+    }
+
+    fun hideFloating() {
+        floating?.let { runCatching { wm.removeView(it) } }
+        floating = null
+        floatingParams = null
+        floatingOrb = null
+    }
+
+    private fun floatingTouch(size: Int) = object : View.OnTouchListener {
+        private var downX = 0f
+        private var downY = 0f
+        private var startX = 0
+        private var startY = 0
+        private var moved = false
+        private var held = false
+        private val hold = Runnable {
+            held = true
+            floating?.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+            cb.onFridayLook()
+        }
+
+        override fun onTouch(v: View, e: MotionEvent): Boolean {
+            val p = floatingParams ?: return false
+            when (e.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    downX = e.rawX
+                    downY = e.rawY
+                    startX = p.x
+                    startY = p.y
+                    moved = false
+                    held = false
+                    v.postDelayed(hold, ViewConfiguration.getLongPressTimeout().toLong())
+                }
+                MotionEvent.ACTION_MOVE -> {
+                    val dx = e.rawX - downX
+                    val dy = e.rawY - downY
+                    if (!moved && hypot(dx, dy) > touchSlop) {
+                        moved = true
+                        v.removeCallbacks(hold)
+                    }
+                    if (moved) {
+                        p.x = clampX(startX + dx.roundToInt(), size)
+                        p.y = clampY(startY + dy.roundToInt(), size)
+                        wm.updateViewLayout(v, p)
+                    }
+                }
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                    v.removeCallbacks(hold)
+                    if (moved) {
+                        // Snap to the nearer edge, like a chat head.
+                        val m = ctx.resources.displayMetrics
+                        p.x = if (p.x + size / 2 < m.widthPixels / 2) px(6) else m.widthPixels - size - px(6)
+                        wm.updateViewLayout(v, p)
+                        Store.get(ctx).floatingPos = p.x to p.y
+                    } else if (!held && e.actionMasked == MotionEvent.ACTION_UP) {
+                        cb.onFridayTap()
+                    }
+                }
+            }
+            return true
+        }
+    }
+
+    // ---------- Out of the picture ----------
+
+    /** Hides every Vakya window for a moment, so a screenshot shows only the app. */
+    fun hideForCapture() {
+        listOfNotNull(bubble, panel, jarvis, floating).forEach { it.visibility = View.INVISIBLE }
+    }
+
+    fun showAfterCapture() {
+        listOfNotNull(bubble, panel, jarvis, floating).forEach { it.visibility = View.VISIBLE }
     }
 
     // ---------- Panel ----------

@@ -1,12 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Always the white OneZeroLabs theme (onezerolabs.in): white, deep navy #0E1A33. -->
-    <style name="AppTheme" parent="android:Theme.Material.Light.NoActionBar">
-        <item name="android:colorAccent">#0E1A33</item>
-        <item name="android:colorPrimary">#0E1A33</item>
-        <item name="android:statusBarColor">#FFFFFF</item>
-        <item name="android:navigationBarColor">#F8FAFC</item>
-        <item name="android:windowLightStatusBar">true</item>
-        <item name="android:windowLightNavigationBar">true</item>
+    <!-- Friday's dark look (navy-black, cyan accents), for the reply assistant's settings too. -->
+    <style name="AppTheme" parent="android:Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#5CE1FF</item>
+        <item name="android:colorPrimary">#030712</item>
+        <item name="android:colorPrimaryDark">#030712</item>
+        <item name="android:statusBarColor">#030712</item>
+        <item name="android:navigationBarColor">#071A2E</item>
+        <item name="android:windowBackground">#030712</item>
+        <item name="android:alertDialogTheme">@style/FridayDialog</item>
+    </style>
+
+    <style name="FridayTheme" parent="AppTheme" />
+
+    <style name="FridayDialog" parent="android:Theme.Material.Dialog.Alert">
+        <item name="android:colorAccent">#5CE1FF</item>
+        <item name="android:windowBackground">@drawable/dialog_bg</item>
+        <item name="android:textColorPrimary">#E8F7FF</item>
     </style>
 </resources>

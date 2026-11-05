@@ -50,6 +50,15 @@ class JarvisVoice(context: Context) {
         if (Store.get(app).fridayVoice == JENNY && j != null) j.speak(text, done) else phone.speak(text, done)
     }
 
+    /** Make [text] ahead of time (Jenny only), so saying it later starts at once. */
+    fun prepare(text: String) = loader.execute { jenny?.prepare(text) }
+
+    /** Stop talking now (the user interrupted). */
+    fun stop() {
+        phone.stop()
+        jenny?.stop()
+    }
+
     /** For "Hear her" in Vakya: waits for Jenny to load first. */
     fun preview(text: String) = loader.execute { speak(text) {} }
 
@@ -130,7 +139,19 @@ private class JennyVoice(context: Context) {
                         return 1
                     }
                 }
-                tts.generateWithCallback(text, 0, 1.0f, play)
+                val ready = cache[text]
+                if (ready != null) {
+                    // Made earlier ("How can I help you, boss?"): no wait at all.
+                    var i = 0
+                    while (i < ready.size && me == current) {
+                        val n = minOf(4096, ready.size - i)
+                        track.write(ready, i, n, AudioTrack.WRITE_BLOCKING)
+                        i += n
+                    }
+                    frames = i
+                } else {
+                    tts.generateWithCallback(text, 0, 1.0f, play)
+                }
                 // Let the last of it play out.
                 val until = SystemClock.uptimeMillis() + 2000 + frames * 1000L / rate
                 while (me == current && track.playbackHeadPosition < frames && SystemClock.uptimeMillis() < until) {
@@ -147,6 +168,15 @@ private class JennyVoice(context: Context) {
 
     fun stop() {
         current++
+    }
+
+    /** Short lines said often, made once and kept, so they're heard the moment they're needed. */
+    private val cache = java.util.concurrent.ConcurrentHashMap<String, FloatArray>()
+
+    fun prepare(text: String) {
+        worker.execute {
+            if (!cache.containsKey(text)) runCatching { cache[text] = tts.generate(text, 0, 1.0f).samples }
+        }
     }
 
     fun release() {

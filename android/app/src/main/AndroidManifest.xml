@@ -29,6 +29,25 @@
         android:name="android.permission.PACKAGE_USAGE_STATS"
         tools:ignore="ProtectedPermissions" />
 
+    <!-- Friday 0.9: the phone's switches. Do not disturb and "Modify system settings" (brightness,
+         auto-rotate) are granted by the user in Settings; Wi-Fi and network state are read only. -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
+    <uses-permission
+        android:name="android.permission.WRITE_SETTINGS"
+        tools:ignore="ProtectedPermissions" />
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
+    <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission
+        android:name="android.permission.BLUETOOTH"
+        android:maxSdkVersion="30" />
+
+    <!-- "What's on today?" and "meeting in ten minutes": read only, asked for in the Command Center. -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+
+    <!-- Morning briefing and evening summary are set again after the phone restarts. -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <!-- "Keep Friday on when the phone is locked": asks to leave Vakya out of battery saving. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
@@ -49,14 +68,21 @@
         android:networkSecurityConfig="@xml/network_security_config"
         android:theme="@style/AppTheme">
 
+        <!-- Friday's Command Center: the app's home. -->
         <activity
-            android:name=".ui.MainActivity"
-            android:exported="true">
+            android:name=".ui.CommandCenterActivity"
+            android:exported="true"
+            android:theme="@style/FridayTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- The reply assistant's settings. Exported for the adb self-test (jarvis_test). -->
+        <activity
+            android:name=".ui.MainActivity"
+            android:exported="true" />
 
         <!-- Shows the unlock prompt when Friday is asked to open something on a locked phone. -->
         <activity
@@ -90,6 +116,19 @@
                 <action android:name="android.service.notification.NotificationListenerService" />
             </intent-filter>
         </service>
+
+        <receiver
+            android:name="com.replybot.automation.Proactive$BriefingReceiver"
+            android:exported="false" />
+
+        <receiver
+            android:name="com.replybot.automation.Proactive$BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
 
         <service
             android:name="com.replybot.jarvis.JarvisService"
