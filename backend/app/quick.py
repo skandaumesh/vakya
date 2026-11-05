@@ -1,14 +1,14 @@
 """Friday's instant path: common phone commands understood without a model call.
 
 "set an alarm for 6", "open Instagram", "play Kesariya on Spotify", "turn on the flashlight",
-"thanks"... are matched here and answered at once. Anything else (or anything ambiguous)
-returns None and goes to the model.
+"thanks", "what time is it", and several of these joined with "and"... are matched here and
+answered at once. Anything else (or anything ambiguous) returns None and goes to the model.
 """
 
 import re
 from datetime import datetime
 
-from .schemas import DeviceTask, JarvisPlan, JarvisTurn
+from .schemas import MAX_STEPS, DeviceTask, JarvisPlan, JarvisTurn
 
 _NUMBERS = {
     "a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7,
@@ -65,6 +65,40 @@ def _plan(heard: str, say: str, **task) -> JarvisPlan:
     return JarvisPlan(heard=heard, action="device", say=say, task=DeviceTask(**task))
 
 
+# "turn on wifi and set brightness to 40", "open Spotify then play Kesariya".
+_JOINED = re.compile(r"\s+(?:and then|and also|and|then|also|after that)\s+|\.\s+")
+_MUSIC_APPS = {"spotify": "spotify", "youtube": "youtube", "youtube music": "youtube music"}
+
+
+def _first_lower(say: str) -> str:
+    word = say.split(" ", 1)[0]
+    # Names stay as they are: "Wi-Fi", "NFC", "Bluetooth".
+    return say[0].lower() + say[1:] if word[1:].islower() and word not in ("Bluetooth",) else say
+
+
+def _together(heard: str, local_time: str | None) -> JarvisPlan | None:
+    """Several quick commands in one breath: one plan with their steps in order, but only when
+    every part is one (so "play rock and roll" stays one song)."""
+    parts = [p for p in _JOINED.split(_clean(heard)) if p.strip()]
+    if not 2 <= len(parts) <= MAX_STEPS:
+        return None
+    plans = [quick_plan(part, local_time) for part in parts]
+    if any(p is None or p.action != "device" or len(p.steps) != 1 for p in plans):
+        return None
+    steps = [p.steps[0] for p in plans]
+    says = [re.sub(r",? boss\.?$", "", p.say).rstrip(". ") for p in plans]
+    # "open Spotify and play Kesariya": play it on Spotify (one step, not two).
+    for i in range(len(steps) - 1, 0, -1):
+        before, now = steps[i - 1], steps[i]
+        if before.kind == "open_app" and now.kind == "play" and not now.app and before.app in _MUSIC_APPS:
+            steps[i] = now.model_copy(update={"app": _MUSIC_APPS[before.app]})
+            says[i] = f"{says[i]} on {plans[i - 1].say.removeprefix('Opening ').split(',')[0]}"
+            del steps[i - 1], says[i - 1]
+    says = [x for x in says if x != "Done"] or ["Done"]
+    say = says[0] if len(says) == 1 else ", ".join(says[:-1]) + " and " + _first_lower(says[-1])
+    return JarvisPlan(heard=heard, action="device", say=f"{say}, boss.", steps=steps)
+
+
 _YES_WORD = (r"(?:yes|yeah|yep|yup|haan|ha|han|ok|okay|sure|go ahead|do it|please|please do|go for it|"
              r"sounds good|perfect|correct|right|confirm|confirmed|absolutely|of course)")
 _YES = rf"{_YES_WORD}(?: {_YES_WORD})*"  # "yes go ahead", "ok sure do it"
@@ -113,6 +147,17 @@ def quick_plan(
 
     if re.fullmatch(r"(?:ok |okay )?(?:thanks|thank you|thats all|that's all|that is all|stop|bye|goodbye|never ?mind|nothing)", t):
         return JarvisPlan(heard=heard, action="end", say="Anytime, boss.")
+
+    # The time and date: the phone's clock knows.
+    if now and re.fullmatch(r"(?:(?:what'?s|what is) the time|what time is it|tell me the time|(?:the )?current time|time)"
+                            r"(?: now| right now| please)?", t):
+        return JarvisPlan(heard=heard, action="answer", say=f"It's {_spoken(now.hour, now.minute)}, boss.")
+    if now and re.fullmatch(r"(?:what'?s|what is) (?:the |today'?s )?date(?: today)?|(?:what|which) day is (?:it|today)(?: today)?|"
+                            r"what'?s today|today'?s date|what'?s the day today", t):
+        return JarvisPlan(heard=heard, action="answer", say=f"It's {now:%A}, {now.day} {now:%B}, boss.")
+
+    if (joined := _together(heard, local_time)) is not None:
+        return joined
 
     # "yes" / "send it" right after Friday asked "Shall I send it?"
     if re.fullmatch(r"(?:yes|yeah|yep|yup|haan|ha|ok|okay|sure|go ahead|do it|send|send it|yes send it|ok send it|send the message)", t):

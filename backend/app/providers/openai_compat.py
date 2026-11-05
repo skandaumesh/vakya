@@ -107,6 +107,7 @@ class OpenAICompatProvider:
         vision_model: str | None = None,
         stt_model: str | None = None,
         model_extra: dict[str, dict] | None = None,
+        tts_model: str | None = None,
     ):
         # Per-model request options that override `extra` (models differ in what they accept).
         self.model_extra = model_extra or {}
@@ -115,6 +116,7 @@ class OpenAICompatProvider:
         self.model = model
         self.vision_model = vision_model
         self.stt_model = stt_model
+        self.tts_model = tts_model
         # Tried in order when the one before is rate-limited. On Groq every model
         # has its own free allowance, so a fallback adds capacity, not just retries.
         self.models = [model, *(fallback_models or [])]
@@ -207,6 +209,27 @@ class OpenAICompatProvider:
         log.info("speech provider=%s model=%s ms=%d bytes=%d", self.name, self.stt_model,
                  int((time.perf_counter() - started) * 1000), len(audio))
         return (getattr(resp, "text", "") or "").strip()
+
+    async def speak(self, text: str, voice: str) -> bytes:
+        """Text to speech (a WAV), with the provider's voice model."""
+        if not self.tts_model:
+            raise LLMError(f"{self.name} has no voice model")
+        started = time.perf_counter()
+        try:
+            resp = await self.client.audio.speech.create(
+                model=self.tts_model, voice=voice, input=text, response_format="wav",
+            )
+            audio = await resp.aread()
+        except openai.RateLimitError as e:
+            raise _rate_limited(self.name, e) from e
+        except (openai.APITimeoutError, openai.APIConnectionError) as e:
+            raise ProviderTimeout(f"{self.name} voice didn't answer in time") from e
+        except openai.APIStatusError as e:
+            # Kept apart from the AI's errors: a voice problem must not take the provider out of use.
+            raise LLMError(f"{self.name} voice error {e.status_code} {_error_code(e)}".rstrip()) from e
+        log.info("voice provider=%s model=%s ms=%d chars=%d bytes=%d", self.name, self.tts_model,
+                 int((time.perf_counter() - started) * 1000), len(text), len(audio))
+        return audio
 
     async def _call(self, model, messages, response_format, output_format, max_tokens, started):
         last_error = ""

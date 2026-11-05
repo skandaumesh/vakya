@@ -202,3 +202,35 @@ def test_a_plan_labelled_answer_with_steps_is_carried_out(fake):
                               steps=[DeviceTask(kind="message", contact="Amma", text="I'll be late")])
     data = _post(text="message Amma I'll be late")
     assert data["action"] == "device" and data["steps"][0]["kind"] == "message"
+
+
+@pytest.mark.parametrize("said, steps, say", [
+    ("turn on wifi and set brightness to 40 percent", [("toggle", "wifi"), ("brightness", 40)], "Wi-Fi on and brightness at 40 percent, boss."),
+    ("turn off wifi. turn on bluetooth.", [("toggle", "wifi"), ("toggle", "bluetooth")], "Wi-Fi off and Bluetooth on, boss."),
+    ("open spotify and play kesariya", [("play", "spotify")], "Playing kesariya on Spotify, boss."),
+    ("set an alarm for 7 am and turn on do not disturb", [("alarm", "07:00"), ("toggle", "dnd")], "Alarm set for 7 AM and do not disturb on, boss."),
+    ("go home and lock the phone", [("phone", "home"), ("phone", "lock")], "Done, boss."),
+])
+def test_quick_commands_said_together_skip_the_model(said, steps, say):
+    plan = quick_plan(said, NIGHT)
+    got = [(s.kind, s.target or s.app or s.time or s.value) for s in plan.steps]
+    assert plan.action == "device" and got == steps and plan.say == say
+
+
+@pytest.mark.parametrize("said", ["play rock and roll", "call mom and dad"])
+def test_and_inside_a_name_stays_one_command(said):
+    assert len(quick_plan(said, NIGHT).steps) == 1
+
+
+@pytest.mark.parametrize("said", ["turn on wifi and tell Rahul I'm late", "turn on wifi and bluetooth", "what's the time in London"])
+def test_anything_not_quick_in_it_goes_to_the_model(said):
+    assert quick_plan(said, NIGHT) is None
+
+
+@pytest.mark.parametrize("said, say", [
+    ("what's the time", "It's 9:10 PM, boss."), ("What time is it?", "It's 9:10 PM, boss."),
+    ("what's the date today", "It's Wednesday, 4 November, boss."), ("what day is it", "It's Wednesday, 4 November, boss."),
+])
+def test_the_time_and_date_from_the_phones_clock(said, say):
+    plan = quick_plan(said, NIGHT)
+    assert plan.action == "answer" and plan.say == say

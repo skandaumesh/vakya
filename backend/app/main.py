@@ -10,7 +10,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, llm, phone_link, providers, usage
+from . import config, llm, phone_link, providers, usage, voice
 from .errors import DailyLimitReached
 from .prompts import clean_draft
 from .schemas import (
@@ -18,6 +18,8 @@ from .schemas import (
     ComposeResponse,
     JarvisRequest,
     JarvisResponse,
+    SpeakRequest,
+    SpeakResponse,
     StyleCard,
     StyleCardRequest,
     SuggestRequest,
@@ -40,7 +42,7 @@ async def lifespan(_: FastAPI):
 # In production the interactive API docs (/docs, /redoc, /openapi.json) are hidden:
 # no need to show strangers how to call the server.
 _docs = {} if config.SHOW_DOCS else {"docs_url": None, "redoc_url": None, "openapi_url": None}
-app = FastAPI(title="Vakya", version="0.9.0", lifespan=lifespan, **_docs)
+app = FastAPI(title="Vakya", version="0.9.1", lifespan=lifespan, **_docs)
 
 
 def require_app_key(x_vakya_key: str | None = Header(default=None)) -> None:
@@ -76,17 +78,20 @@ async def health():
 
 
 @contextmanager
-def _ai_access(request: Request, groq_key: str | None, device: str | None):
+def _ai_access(request: Request, groq_key: str | None, device: str | None, spoken: bool = False):
     """Use the phone's own Groq key if it sent one (no limit); otherwise count this
-    request against the phone's daily share of the shared key."""
+    request against the phone's daily share of the shared key. [spoken]: a line for Friday's
+    voice, counted apart from AI replies."""
     token = None
+    limit = config.VOICE_DAILY_LIMIT if spoken else config.DAILY_LIMIT
     if groq_key and groq_key.strip():
         token = providers.use_for_request(providers.user_groq_provider(groq_key.strip()))
-    elif config.DAILY_LIMIT:
+    elif limit:
         who = device or (request.client.host if request.client else "unknown")
-        if not usage.take(who, config.DAILY_LIMIT):
+        if not usage.take(("voice:" if spoken else "") + who, limit):
+            what = "spoken lines" if spoken else "AI replies"
             raise DailyLimitReached(
-                f"You've used today's {config.DAILY_LIMIT} free AI replies. Add your own free Groq key "
+                f"You've used today's {limit} free {what}. Add your own free Groq key "
                 "in Vakya for unlimited replies, or try again tomorrow."
             )
     try:
@@ -150,10 +155,31 @@ async def jarvis(
     elif not (req.text or "").strip():
         raise HTTPException(status_code=422, detail="send audio or text")
     # Shape only: never what was said.
-    log.info("jarvis app=%s in_chat=%s messages=%d audio_bytes=%d text=%s",
-             req.app, req.in_chat, len(req.messages), len(audio or b""), req.text is not None)
+    log.info("jarvis app=%s in_chat=%s messages=%d audio_bytes=%d text=%s voice=%s",
+             req.app, req.in_chat, len(req.messages), len(audio or b""), req.text is not None, req.voice)
     with _ai_access(request, x_groq_key, x_vakya_device):
-        return await llm.jarvis(req, audio)
+        resp = await llm.jarvis(req, audio)
+        # Her reply in her natural voice, in the same answer: no second trip for the phone.
+        if req.voice and resp.say.strip() and resp.action != "ignore":
+            spoken = await voice.speak(resp.say, req.voice)
+            if spoken:
+                resp.audio = base64.b64encode(spoken).decode()
+        return resp
+
+
+@app.post("/speak", response_model=SpeakResponse, dependencies=[Depends(require_app_key)])
+async def speak(
+    req: SpeakRequest,
+    request: Request,
+    x_groq_key: str | None = Header(default=None),
+    x_vakya_device: str | None = Header(default=None),
+):
+    """A line in Friday's natural voice (the greeting, a reminder). 503: say it on the phone."""
+    with _ai_access(request, x_groq_key, x_vakya_device, spoken=True):
+        audio = await voice.speak(req.text, req.voice)
+    if audio is None:
+        raise HTTPException(status_code=503, detail="Friday's natural voice isn't available right now")
+    return SpeakResponse(audio=base64.b64encode(audio).decode())
 
 
 @app.post("/style-card", response_model=StyleCard, dependencies=[Depends(require_app_key)])

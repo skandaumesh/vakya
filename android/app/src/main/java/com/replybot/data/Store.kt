@@ -86,10 +86,16 @@ class Store private constructor(private val file: File, private val prefs: Share
         prefs.edit().putString("friday_profile", JSONArray(kept.takeLast(80)).toString()).apply()
     }
 
-    /** Friday's voice: "jenny" (Irish, made on the phone) or "phone" (the phone's own text-to-speech). */
+    /** Friday's voice: "natural" (a human-sounding voice made by the server, see [naturalVoice]),
+     *  "jenny" (Irish, made on the phone, works offline) or "phone" (the phone's own text-to-speech). */
     var fridayVoice: String
-        get() = prefs.getString("friday_voice", "jenny") ?: "jenny"
+        get() = prefs.getString("friday_voice", "natural") ?: "natural"
         set(v) = prefs.edit().putString("friday_voice", v).apply()
+
+    /** Which natural voice: diana, hannah, autumn (women) or austin, daniel, troy (men). */
+    var naturalVoice: String
+        get() = prefs.getString("friday_natural_voice", "diana") ?: "diana"
+        set(v) = prefs.edit().putString("friday_natural_voice", v).apply()
 
     /** Friday says when a personal message arrives: "Message from Rahul on WhatsApp. Shall I read it?" */
     var announceMessages: Boolean

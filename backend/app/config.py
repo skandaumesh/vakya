@@ -65,5 +65,16 @@ DAILY_LIMIT = int(os.environ.get("VAKYA_DAILY_LIMIT", "0"))
 PHONE_LINK = os.environ.get("VAKYA_PHONE_LINK", "1") != "0"
 PORT = int(os.environ.get("VAKYA_PORT", "8000"))
 
+# Friday's natural voice (Orpheus on Groq): her replies come back as audio too. "0" turns it
+# off and the phone speaks with its own voice.
+TTS = os.environ.get("VAKYA_TTS", "1") != "0"
+# Longest text per voice request (Orpheus on Groq takes 200 characters); longer replies are
+# split at sentences and made in parallel.
+TTS_MAX_CHARS = int(os.environ.get("VAKYA_TTS_MAX_CHARS", "200"))
+# Seconds to wait for the voice before the phone is left to speak it itself.
+TTS_TIMEOUT = float(os.environ.get("VAKYA_TTS_TIMEOUT", "6"))
+# Lines each phone may have spoken through /speak per day on the shared key (0 = no limit).
+VOICE_DAILY_LIMIT = int(os.environ.get("VAKYA_VOICE_DAILY_LIMIT", "300"))
+
 # Seconds before a model call is abandoned; a late suggestion is useless.
 LLM_TIMEOUT = float(os.environ.get("VAKYA_LLM_TIMEOUT", "15"))

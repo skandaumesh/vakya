@@ -39,6 +39,10 @@ The launcher opens `ui/CommandCenterActivity`. Friday's flow for one command:
 
 Say "Friday" while she's talking to interrupt her, or press stop.
 
+Her voice (Command Center → Her voice): a natural voice by default (Diana; five others), made by the server along with each reply and played as it arrives (`NaturalVoice` in `jarvis/JarvisVoice.kt`). The greeting and other short lines are fetched once from `/speak` and kept on the phone. Without internet, or until the server's Groq account has accepted the voice model's terms, Jenny (offline, Irish) speaks instead. Jenny and the phone's own voice can also be chosen outright.
+
+Speed: while "Listen for Hey Friday" is on, the app looks in on the server every 10 minutes so a free Render server never falls asleep (a sleeping one takes up to a minute to answer), and it reaches the server the moment the wake word is heard, so the connection is open by the time the command is sent.
+
 ## Code map
 
 | File | What it does |

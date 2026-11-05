@@ -39,7 +39,6 @@ import com.replybot.data.Store
 import com.replybot.importer.ChatExportParser
 import com.replybot.service.ChatReaderService
 import com.replybot.jarvis.JarvisService
-import com.replybot.jarvis.JarvisVoice
 import com.replybot.jarvis.NotificationWatcher
 import com.replybot.jarvis.NotificationLog
 import com.replybot.jarvis.Habits
@@ -59,7 +58,6 @@ class MainActivity : Activity() {
     private lateinit var jarvisToggle: CheckBox
     private lateinit var fridayAccess: TextView
     /** For "Hear her": made on first use (loading the voice takes a moment). */
-    private var previewVoice: JarvisVoice? = null
     private lateinit var factsBox: LinearLayout
     private var talkAfterPermission = false
     private lateinit var restrictedHelp: LinearLayout
@@ -203,13 +201,7 @@ class MainActivity : Activity() {
                     toast("Also allow \"Display pop-up windows while running in the background\" if your phone has it")
                 }
             })
-            addView(glassCheckBox("Irish voice, like FRIDAY in the films (\"Jenny\", made on this phone)", store.fridayVoice == JarvisVoice.JENNY) { checked ->
-                store.fridayVoice = if (checked) JarvisVoice.JENNY else JarvisVoice.PHONE
-            })
-            addView(glassButton("Hear her", primary = false) {
-                val v = previewVoice ?: JarvisVoice(this@MainActivity).also { previewVoice = it }
-                v.preview("Hi boss, I'm Friday. What do you need?")
-            })
+            addView(text("Friday's voice is chosen in the Command Center (Her voice).", 13f, muted = true))
             addView(glassButton("Keep Friday on when the phone is locked", primary = false) { keepFridayOn() })
             addView(glassButton("Let Friday see notifications", primary = false) { askNotificationAccess() })
             addView(glassCheckBox("Tell me when a message comes (\"Message from Rahul. Shall I read it?\")", store.announceMessages) { checked ->
@@ -466,7 +458,6 @@ class MainActivity : Activity() {
     }
 
     override fun onDestroy() {
-        previewVoice?.shutdown()
         io.shutdownNow()
         super.onDestroy()
     }

@@ -29,6 +29,7 @@ import com.replybot.device.CalendarReader
 import com.replybot.device.DeviceStatus
 import com.replybot.device.SystemControls
 import com.replybot.jarvis.JarvisService
+import com.replybot.jarvis.JarvisVoice
 import com.replybot.jarvis.NotificationLog
 import com.replybot.memory.Memory
 import com.replybot.permissions.Permissions
@@ -61,6 +62,8 @@ class CommandCenterActivity : Activity() {
     private lateinit var routinesBox: LinearLayout
     private lateinit var permsBox: LinearLayout
     private lateinit var factsBox: LinearLayout
+    private lateinit var voiceBox: LinearLayout
+    private var previewVoice: JarvisVoice? = null
     private var turnOnAfterMic = false
 
     private val busListener: (FridayBus.State) -> Unit = { s ->
@@ -107,6 +110,7 @@ class CommandCenterActivity : Activity() {
 
     override fun onDestroy() {
         io.shutdownNow()
+        previewVoice?.shutdown()
         super.onDestroy()
     }
 
@@ -178,6 +182,15 @@ class CommandCenterActivity : Activity() {
             })
         }
         col.addView(hero)
+
+        // Voice.
+        voiceBox = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        col.addView(kit.card().apply {
+            addView(kit.heading("Her voice", "voice"))
+            addView(voiceBox)
+            addView(kit.text("Natural voices sound like a real person. The server makes them along with each reply, so they need internet; without it Jenny speaks instead. Jenny and the phone's voice work offline. Tap one to hear her.", 12f, Neo.MUTED))
+        })
+        renderVoices()
 
         // Device.
         tiles = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
@@ -291,6 +304,39 @@ class CommandCenterActivity : Activity() {
         })
         col.addView(kit.text("Vakya ${BuildConfig.VERSION_NAME} · Friday Mark II", 11f, Neo.MUTED, mono = true).apply { gravity = Gravity.CENTER })
         return scroll
+    }
+
+    private fun renderVoices() {
+        voiceBox.removeAllViews()
+        val kind = store.fridayVoice
+        val name = store.naturalVoice
+        fun pick(newKind: String, newName: String? = null) {
+            store.fridayVoice = newKind
+            newName?.let { store.naturalVoice = it }
+            renderVoices()
+            val v = previewVoice ?: JarvisVoice(this).also { previewVoice = it }
+            v.preview("Hi boss, I'm Friday. What can I do for you?") {
+                runOnUiThread { toast("The natural voice isn't ready on the server yet, so that was Jenny.") }
+            }
+            // Ready her greeting in the new voice, so "How can I help you, boss?" comes at once.
+            v.prepare(JarvisService.GREETING)
+        }
+        fun row(label: String, chips: List<View>) {
+            voiceBox.addView(kit.text(label, 11f, Neo.MUTED, mono = true).apply { setPadding(0, kit.px(8), 0, 0) })
+            voiceBox.addView(LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                chips.forEach { addView(it) }
+            })
+        }
+        fun natural(v: String) = kit.chip(v.replaceFirstChar { it.uppercase() }, kind == JarvisVoice.NATURAL && name == v) {
+            pick(JarvisVoice.NATURAL, v)
+        }
+        row("NATURAL · WOMEN", listOf("diana", "hannah", "autumn").map(::natural))
+        row("NATURAL · MEN", listOf("austin", "daniel", "troy").map(::natural))
+        row("OFFLINE", listOf(
+            kit.chip("Jenny (Irish)", kind == JarvisVoice.JENNY) { pick(JarvisVoice.JENNY) },
+            kit.chip("Phone's voice", kind == JarvisVoice.PHONE) { pick(JarvisVoice.PHONE) },
+        ))
     }
 
     private fun timedRow(title: String, on: Boolean, getAt: () -> Int, setAt: (Int) -> Unit, setOn: (Boolean) -> Unit): View {

@@ -67,6 +67,19 @@ class ChainProvider:
                 errors.append(e)
         raise self._most_useful(errors) if errors else LLMError("no speech-to-text available")
 
+    async def speak(self, text: str, voice: str) -> bytes:
+        """Text to speech with the first provider that has a voice model (Groq). Failures here
+        don't mark a provider as unavailable: the AI itself may be fine."""
+        errors: list[Exception] = []
+        for p in self._available():
+            if not getattr(p, "tts_model", None):
+                continue
+            try:
+                return await p.speak(text, voice)
+            except LLMError as e:
+                errors.append(e)
+        raise self._most_useful(errors) if errors else LLMError("no voice model available")
+
     async def describe_image(self, image_b64: str, prompt: str, max_tokens: int = 300) -> str:
         errors: list[Exception] = []
         for p in self._available():

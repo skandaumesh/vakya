@@ -308,6 +308,10 @@ class JarvisRequest(BaseModel):
     routines: list[Routine] = Field(default_factory=list, max_length=20)
     pending: str | None = Field(default=None, max_length=500, description="Steps waiting for my yes, if Friday just asked.")
     briefing: Literal["morning", "evening", "day"] | None = Field(default=None, description="Asked for a spoken briefing.")
+    voice: str | None = Field(
+        default=None, max_length=20,
+        description="Say the reply in this natural voice (e.g. 'diana'): `audio` in the response. None: the phone speaks.",
+    )
 
 
 MAX_STEPS = 6
@@ -361,3 +365,15 @@ class JarvisResponse(BaseModel):
     remember: list[str] = Field(default_factory=list)
     forget: list[str] = Field(default_factory=list)
     latency_ms: int
+    audio: str | None = Field(default=None, description="Base64 WAV of `say` in the asked-for voice, when it could be made.")
+
+
+class SpeakRequest(BaseModel):
+    """Something Friday says that isn't a reply (the greeting, a reminder), in her natural voice."""
+
+    text: str = Field(min_length=1, max_length=1200)
+    voice: str = Field(default="diana", max_length=20)
+
+
+class SpeakResponse(BaseModel):
+    audio: str = Field(description="Base64 WAV.")

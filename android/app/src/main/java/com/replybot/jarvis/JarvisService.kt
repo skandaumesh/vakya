@@ -195,6 +195,10 @@ class JarvisService : Service() {
     @Volatile private var testing = false
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
+    /** Wake-up calls to the server, apart from [io] so a sleeping server never holds up a command. */
+    private val warmer = Executors.newSingleThreadExecutor()
+    /** When the server last heard from us (elapsedRealtime). */
+    @Volatile private var lastServer = 0L
     private var wake: FridayWake? = null
     private var voice: JarvisVoice? = null
     private var mic: Thread? = null
@@ -284,6 +288,7 @@ class JarvisService : Service() {
         voice?.shutdown()
         io.execute { wake?.close() }
         io.shutdown()
+        warmer.shutdown()
         super.onDestroy()
     }
 
@@ -341,6 +346,7 @@ class JarvisService : Service() {
                 return false
             }
             voice = JarvisVoice(this).also { it.prepare(GREETING) }
+            warm("start")
             running = true
             phase(FridayBus.Phase.IDLE)
         }
@@ -477,6 +483,9 @@ class JarvisService : Service() {
     private fun proactive() {
         val store = Store.get(this)
         val memory = Memory.get(this)
+        // A free server sleeps after 15 quiet minutes and then takes up to a minute to answer:
+        // while Friday listens, look in every 10 minutes so she's always quick.
+        if (store.jarvisOn && SystemClock.elapsedRealtime() - lastServer > 10 * 60_000L) warm("keep awake")
         if (store.taskAlerts) {
             memory.takeDue().forEach { t ->
                 Proactive.notify(this, ALERTS, "Reminder", t.text, id = t.id.hashCode())
@@ -595,6 +604,9 @@ class JarvisService : Service() {
                 if (!heard) noise = noise * 0.97 + level * 0.03
                 if (heard) {
                     Log.i(TAG, "friday: wake word")
+                    // Reach the server now, while the command is being said: by the time it's
+                    // sent the connection is open (and a sleeping server is already waking).
+                    warm("wake word")
                     state = State.BUSY
                     val before = preRoll.toList()
                     preRoll.clear()
@@ -741,6 +753,18 @@ class JarvisService : Service() {
         main.post { send(pcm, speech) }
     }
 
+    /** A quick hello to the server (no AI): wakes it if it slept, and opens the connection. */
+    private fun warm(why: String) {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastServer < 45_000L) return
+        lastServer = now
+        val api = Store.get(this).api()
+        warmer.execute {
+            val ok = runCatching { api.health() }.getOrDefault(false)
+            Log.i(TAG, "friday: server ($why) ok=$ok in ${SystemClock.elapsedRealtime() - now} ms")
+        }
+    }
+
     private fun send(pcm: ShortArray, speech: Boolean) {
         if (!speech) {
             if (followUp) endConversation() else {
@@ -814,6 +838,7 @@ class JarvisService : Service() {
         )
         val pend = pending?.takeIf { SystemClock.elapsedRealtime() - it.at < PENDING_FOR_MS }
         if (pend == null) pending = null
+        voice?.serverVoice()?.let { body.put("voice", it) }
         val api = store.api()
         io.execute {
             // Usage times, the calendar and memory take a moment to gather: off the main thread.
@@ -837,7 +862,10 @@ class JarvisService : Service() {
                     briefing = a.briefing,
                 )
             }
+            val sent = SystemClock.elapsedRealtime()
             val result = runCatching { api.jarvis(body) }
+            lastServer = SystemClock.elapsedRealtime()
+            Log.i(TAG, "jarvis: server answered in ${lastServer - sent} ms, voice=${result.getOrNull()?.audio?.size ?: 0} bytes")
             main.post { handle(result, context, a) }
         }
     }
@@ -847,6 +875,8 @@ class JarvisService : Service() {
         result
             .onSuccess { r ->
                 Log.i(TAG, "jarvis: action=${r.action} steps=${r.steps.map { it.kind }} confirm=${r.confirm}")
+                // Her reply, already spoken in her natural voice: played the moment she says it.
+                if (voice?.serverVoice() != null && r.say.isNotBlank()) voice?.offer(r.say, r.audio)
                 if (r.action == "ignore") {
                     // "Friday" was only a word in a sentence: back to waiting, quietly.
                     Log.i(TAG, "friday: not for me")
@@ -1045,8 +1075,14 @@ class JarvisService : Service() {
         // She can be interrupted by her name, unless she's saying it herself.
         state = if (mic != null && !text.contains("friday", ignoreCase = true)) State.SPEAKING else State.BUSY
         v.speak(text) { main.post(done) }
-        // If the speech engine never reports back, don't stay deaf.
-        main.postDelayed(done, 4000L + text.length * 90L)
+        // If the voice never reports back, don't stay deaf (the natural voice may take a few
+        // seconds to come, then fall back to Jenny).
+        main.postDelayed({
+            if (token == speakToken) {
+                v.stop()
+                done()
+            }
+        }, 10_000L + text.length * 90L)
     }
 
     /** After Friday speaks: keep listening for a follow-up, unless the conversation is over. */

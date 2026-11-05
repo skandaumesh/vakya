@@ -21,6 +21,9 @@ PRESETS = {
         "vision_model": "qwen/qwen3.8-27b",
         # Turns "Hey Jarvis" voice commands into text (free, with its own allowance).
         "stt_model": "whisper-large-v3-turbo",
+        # Friday's natural voice (Orpheus). The Groq account must accept its terms once:
+        # console.groq.com/playground?model=canopylabs%2Forpheus-v1-english
+        "tts_model": "canopylabs/orpheus-v1-english",
         "json_mode": "schema",
         "max_tokens_param": "max_completion_tokens",
         # gpt-oss thinks before answering; keep it short so replies stay fast.
@@ -113,6 +116,7 @@ def _build(name: str, primary: bool):
         model_extra=preset.get("model_extra", {}),
         vision_model=override(config.VISION_MODEL) or preset.get("vision_model"),
         stt_model=preset.get("stt_model"),
+        tts_model=preset.get("tts_model"),
     )
 
 
@@ -202,5 +206,6 @@ def user_groq_provider(api_key: str):
             model_extra=preset.get("model_extra", {}),
             vision_model=preset.get("vision_model"),
             stt_model=preset.get("stt_model"),
+            tts_model=preset.get("tts_model"),
         )
     return _user_providers[fingerprint]

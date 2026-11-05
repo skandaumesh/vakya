@@ -62,6 +62,8 @@ data class JarvisResult(
     val remember: List<String> = emptyList(),
     /** Facts the user asked Friday to forget. */
     val forget: List<String> = emptyList(),
+    /** [say], already spoken in Friday's natural voice (a WAV), when asked for and available. */
+    val audio: ByteArray? = null,
 )
 
 /** A phone task Jarvis heard; only the fields its [kind] needs are set. */

@@ -28,15 +28,26 @@ class ReplyApi(
     /** Speech to text, then the AI and maybe a compose or suggest call: allow more time. */
     fun jarvis(body: JSONObject): JarvisResult = parseJarvis(request("POST", "/jarvis", body, readTimeoutMs = 60_000))
 
+    /** A line in Friday's natural voice (a WAV). Short waits: if the server is slow, the phone says it itself. */
+    fun speak(text: String, voice: String): ByteArray {
+        val j = request(
+            "POST", "/speak", JSONObject().put("text", text.take(1200)).put("voice", voice),
+            readTimeoutMs = 7_000, connectTimeoutMs = 4_000,
+        )
+        return java.util.Base64.getDecoder().decode(j.getString("audio"))
+    }
+
     /** Returns the style card JSON to store as-is and send back with each suggestion. */
     fun styleCard(myMessages: List<String>): String =
         request("POST", "/style-card", JSONObject().put("my_messages", JSONArray(myMessages))).toString()
 
-    private fun request(method: String, path: String, body: JSONObject?, readTimeoutMs: Int = 30_000): JSONObject {
+    private fun request(
+        method: String, path: String, body: JSONObject?, readTimeoutMs: Int = 30_000, connectTimeoutMs: Int = 5_000,
+    ): JSONObject {
         val conn = URL(base + path).openConnection() as HttpURLConnection
         try {
             conn.requestMethod = method
-            conn.connectTimeout = 5_000
+            conn.connectTimeout = connectTimeoutMs
             conn.readTimeout = readTimeoutMs
             conn.setRequestProperty("Accept", "application/json")
             appKey?.let { conn.setRequestProperty("X-Vakya-Key", it) }
@@ -184,6 +195,9 @@ class ReplyApi(
             confirm = j.optBoolean("confirm"),
             remember = j.optJSONArray("remember")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty(),
             forget = j.optJSONArray("forget")?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty(),
+            audio = if (j.has("audio") && !j.isNull("audio")) {
+                runCatching { java.util.Base64.getDecoder().decode(j.getString("audio")) }.getOrNull()
+            } else null,
         )
 
         fun parseTask(it: JSONObject) = DeviceTask(
